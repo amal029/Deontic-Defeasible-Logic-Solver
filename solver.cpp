@@ -77,9 +77,8 @@ public:
   Formula(PNot *l) : formula(l) {}
   Formula(OBL *l) : formula(l) {}
   Formula(DNot *l) : formula(l) {}
-  Formula(const Formula &) = default;
+  Formula(const Formula &) = delete;
   Formula(Formula &&) = default;
-  // Formula &operator=(Formula &&) = default;
   ~Formula() {}
   std::string toString() const {
     std::string ss;
@@ -124,28 +123,28 @@ private:
 };
 
 // The hash for the Formula
-struct FormulaHash {
-  std::size_t operator()(const Formula &s) const noexcept {
-    return std::hash<std::string>{}(s.toString());
-  }
-};
+// struct FormulaHash {
+//   std::size_t operator()(const Formula *&s) const noexcept {
+//     return std::hash<std::string>{}(s->toString());
+//   }
+// };
 
-// Equality of formulas
-struct FormulaEq {
-  bool operator()(const Formula &lhs, const Formula &rhs) const {
-    return lhs.toString() == rhs.toString();
-  }
-};
+// // Equality of formulas
+// struct FormulaEq {
+//   bool operator()(const Formula *&lhs, const Formula *&rhs) const {
+//     return lhs->toString() == rhs->toString();
+//   }
+// };
 
 // This is the defeasible rule
-using Antecedent = std::unordered_set<Formula, FormulaHash, FormulaEq>;
-class Defeasible {
+using Antecedent = std::unordered_set<Formula *>;
+class Implication {
 public:
-  Defeasible(Antecedent &&antecedents, Formula &&l)
+  Implication(Antecedent &&antecedents, Formula &&l)
       : antecedents(std::move(antecedents)), consequent(std::move(l)) {}
-  ~Defeasible() {}
-  Defeasible(const Defeasible &) = delete;
-  Defeasible(Defeasible &&) = default;
+  ~Implication() {}
+  Implication(const Implication &) = delete;
+  Implication(Implication &&) = default;
   const Formula *getConsequent() const { return &consequent; }
   const Antecedent &getAntecedents() const { return antecedents; }
   const bool getDone() const { return done; }
@@ -153,7 +152,7 @@ public:
   std::string toString() const {
     std::string toret = "{";
     for (auto it = antecedents.cbegin(); it != antecedents.cend(); ++it)
-      toret += it->toString() + " ";
+      toret += (*it)->toString() + " ";
     toret += "} => " + consequent.toString();
     return toret;
   }
@@ -170,9 +169,9 @@ public:
   RuleTbl() {}
   RuleTbl(const RuleTbl &) = delete;
   RuleTbl(RuleTbl &&) = delete;
-  RuleTbl(std::unordered_map<uint64_t, Defeasible> &&rules)
+  RuleTbl(std::unordered_map<uint64_t, Implication> &&rules)
       : rules(std::move(rules)) {}
-  void insert(uint64_t rnum, Defeasible &&rule) {
+  void insert(uint64_t rnum, Implication &&rule) {
     assert(rnum > 0);
     auto res = rules.find(rnum);
     if (res != rules.end()) {
@@ -195,7 +194,7 @@ public:
   ~RuleTbl() {}
 
 private:
-  std::unordered_map<uint64_t, Defeasible> rules;
+  std::unordered_map<uint64_t, Implication> rules;
 };
 
 using Conc = std::pair<const Formula *, uint64_t>;
@@ -269,7 +268,8 @@ public:
         // Now remove all these from the conclusions.
         conclusions.erase(conclusions.begin(), iter);
 #ifdef DEBUG
-        std::cout << "after erasing from conclusions: " << this->toString() << "\n";
+        std::cout << "after erasing from conclusions: " << this->toString()
+                  << "\n";
 #endif
         // backward removal
         backward_removal();
@@ -283,7 +283,7 @@ public:
       conclusions.push_back(std::move(temp));
 #ifdef DEBUG
       std::cout << this->toString() << "\n";
-#endif      
+#endif
       // Now enable all the possible implications
       for (auto it = ruletbl->begin(); it != ruletbl->end(); ++it) {
         // Now check if all antecedents are satisfied.
@@ -331,10 +331,11 @@ public:
       toret += x.first->toString() + " " + std::to_string(x.second) + ", ";
     });
     toret += "\nPrecendence: ";
-    std::for_each(
-        precedence.cbegin(), precedence.cend(), [&toret](const auto &x) {
-          toret += std::to_string(x.first) + ">" + std::to_string(x.second) + ", ";
-        });
+    std::for_each(precedence.cbegin(), precedence.cend(),
+                  [&toret](const auto &x) {
+                    toret += std::to_string(x.first) + ">" +
+                             std::to_string(x.second) + ", ";
+                  });
 
     toret += "\n)";
     return toret;
@@ -351,7 +352,7 @@ private:
       // Get all the Formulas in conclusions/processing that are
       // triggerd by temp.
       for (auto it = ruletbl->begin(); it != ruletbl->end(); ++it) {
-        Defeasible &trule = std::get<1>(*it);
+        Implication &trule = std::get<1>(*it);
         if (trule.getDone()) {
           // Loop through the antecedents and check if this rule has
           // temp.
@@ -359,10 +360,10 @@ private:
           std::cout << "checking in antecedent formula: " << stemp << "\n";
           std::cout << "rule number being checked: "
                     << std::to_string(it->first) << "\n";
-#endif          
+#endif
           auto fit = std::find_if(
               trule.getAntecedents().begin(), trule.getAntecedents().end(),
-              [&stemp](const Formula &x) { return x.toString() == stemp; });
+              [&stemp](const Formula *x) { return x->toString() == stemp; });
 
           if (fit != trule.getAntecedents().end()) {
             // We have the rule. Now get iterator from the conclusion
@@ -371,8 +372,9 @@ private:
             std::string consequent =
                 std::get<1>(*it).getConsequent()->toString();
 #ifdef DEBUG
-            std::cout << "Trying to remove the consequent:" << consequent << "\n";
-#endif            
+            std::cout << "Trying to remove the consequent:" << consequent
+                      << "\n";
+#endif
             // Get the iterator from the conclusions
             auto cit = std::partition(conclusions.begin(), conclusions.end(),
                                       [&ruleNum, &consequent](const auto &x) {
@@ -388,7 +390,7 @@ private:
                                      std::to_string(x.second) + ", ";
                           });
             std::cout << toret << "\n";
-#endif            
+#endif
             if (cit != conclusions.begin()) {
               for (auto ccit = conclusions.begin(); ccit != cit; ++ccit)
                 remove.push_back(*ccit);
@@ -416,7 +418,7 @@ private:
                                      std::to_string(x.second) + ", ";
                           });
             std::cout << toret << "\n";
-            
+
             toret = "\nConclusions: ";
             std::for_each(conclusions.cbegin(), conclusions.cend(),
                           [&toret](const Conc &x) {
@@ -433,14 +435,14 @@ private:
   }
 
   // Checking antecedent
-  bool check_antecedents(const Defeasible &rule) {
+  bool check_antecedents(const Implication &rule) {
     std::vector<std::string> cons;
     for (const auto &x : conclusions) {
       cons.push_back(std::get<0>(x)->toString());
     }
     size_t counter = 0;
     for (const auto &x : rule.getAntecedents()) {
-      if (std::find(cons.cbegin(), cons.cend(), x.toString()) != cons.end())
+      if (std::find(cons.cbegin(), cons.cend(), x->toString()) != cons.end())
         counter++;
     }
     return (counter == rule.getAntecedents().size());
@@ -496,15 +498,16 @@ int main() {
   OBL ob = OBL(&B), od = OBL(&D);
 
   // Now the implications (defeasible rules)
-  Defeasible r1{{Formula{&A}}, Formula(&ob)};
-  Defeasible r2{{Formula{&ob}}, Formula{&C}};
-  Defeasible r3{{Formula{&ob}, Formula{&C}}, Formula{&D}};
-  Defeasible r4{{Formula{&L}}, Formula{&M}};
-  Defeasible r5{{Formula{&A}, Formula{&M}, Formula{&od}}, Formula{&T}};
-  Defeasible r6{{Formula{&T}}, Formula{&ND}};
-  Defeasible r7{{Formula{&D}}, Formula{&NX}};
-  Defeasible r8{{Formula{&ND}}, Formula{&X}};
-  Defeasible r9{{Formula{&L}}, Formula{&od}};
+  Implication r1{{new Formula{&A}}, Formula(&ob)};
+  Implication r2{{new Formula{&ob}}, Formula{&C}};
+  Implication r3{{new Formula{&ob}, new Formula{&C}}, Formula{&D}};
+  Implication r4{{new Formula{&L}}, Formula{&M}};
+  Implication r5{{new Formula{&A}, new Formula{&M}, new Formula{&od}},
+                Formula{&T}};
+  Implication r6{{new Formula{&T}}, Formula{&ND}};
+  Implication r7{{new Formula{&D}}, Formula{&NX}};
+  Implication r8{{new Formula{&ND}}, Formula{&X}};
+  Implication r9{{new Formula{&L}}, Formula{&od}};
 
   // Now the rule table
   RuleTbl rules{};
