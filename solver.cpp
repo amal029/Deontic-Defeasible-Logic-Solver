@@ -77,10 +77,9 @@ public:
   Formula(PNot *l) : formula(l) {}
   Formula(OBL *l) : formula(l) {}
   Formula(DNot *l) : formula(l) {}
-  // TODO: Remove this copy constructor later on
   Formula(const Formula &) = default;
   Formula(Formula &&) = default;
-  Formula &operator=(Formula &&) = default;
+  // Formula &operator=(Formula &&) = default;
   ~Formula() {}
   std::string toString() const {
     std::string ss;
@@ -493,15 +492,20 @@ int main() {
   Literal A{"A"}, B{"B"}, C{"C"}, D{"D"}, L{"L"}, M{"M"}, T{"T"}, X{"X"};
   // Now the nots if any
   PNot ND{&D}, NX{&X};
+  // An example of a deontic
+  OBL ob = OBL(&B), od = OBL(&D);
+
   // Now the implications (defeasible rules)
-  Defeasible r1{{Formula{&A}}, Formula(&B)};
-  Defeasible r2{{Formula{&B}}, Formula{&C}};
-  Defeasible r3{{Formula{&B}, Formula{&C}}, Formula{&D}};
+  Defeasible r1{{Formula{&A}}, Formula(&ob)};
+  Defeasible r2{{Formula{&ob}}, Formula{&C}};
+  Defeasible r3{{Formula{&ob}, Formula{&C}}, Formula{&D}};
   Defeasible r4{{Formula{&L}}, Formula{&M}};
-  Defeasible r5{{Formula{&A}, Formula{&M}}, Formula{&T}};
+  Defeasible r5{{Formula{&A}, Formula{&M}, Formula{&od}}, Formula{&T}};
   Defeasible r6{{Formula{&T}}, Formula{&ND}};
   Defeasible r7{{Formula{&D}}, Formula{&NX}};
   Defeasible r8{{Formula{&ND}}, Formula{&X}};
+  Defeasible r9{{Formula{&L}}, Formula{&od}};
+
   // Now the rule table
   RuleTbl rules{};
   rules.insert(1, std::move(r1));
@@ -512,6 +516,7 @@ int main() {
   rules.insert(6, std::move(r6));
   rules.insert(7, std::move(r7));
   rules.insert(8, std::move(r8));
+  rules.insert(9, std::move(r9));
 
   // Now the facts
   Formula f1{&A}, f2{&L};
