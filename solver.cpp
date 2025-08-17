@@ -497,17 +497,29 @@ int main() {
   // An example of a deontic
   OBL ob = OBL(&B), od = OBL(&D);
 
+  // Declare the formulas to be used
+  Formula ra1 = Formula{&A};
+  Formula ra2 = Formula{&ob};
+  Formula ra3 = Formula{&ob}, ra4 = Formula{&C};
+  Formula ra5{&L};
+  Formula ra6{&A};
+  Formula ra7{&M};
+  Formula ra8{&od};
+  Formula ra9{&T};
+  Formula ra10{&D};
+  Formula ra11{&ND};
+  Formula ra12{&L};
+  
   // Now the implications (defeasible rules)
-  Implication r1{{new Formula{&A}}, Formula(&ob)};
-  Implication r2{{new Formula{&ob}}, Formula{&C}};
-  Implication r3{{new Formula{&ob}, new Formula{&C}}, Formula{&D}};
-  Implication r4{{new Formula{&L}}, Formula{&M}};
-  Implication r5{{new Formula{&A}, new Formula{&M}, new Formula{&od}},
-                Formula{&T}};
-  Implication r6{{new Formula{&T}}, Formula{&ND}};
-  Implication r7{{new Formula{&D}}, Formula{&NX}};
-  Implication r8{{new Formula{&ND}}, Formula{&X}};
-  Implication r9{{new Formula{&L}}, Formula{&od}};
+  Implication r1{{&ra1}, Formula(&ob)};
+  Implication r2{{&ra2}, Formula{&C}};
+  Implication r3{{&ra3, &ra4}, Formula{&D}};
+  Implication r4{{&ra5}, Formula{&M}};
+  Implication r5{{&ra6, &ra7, &ra8}, Formula{&T}};
+  Implication r6{{&ra9}, Formula{&ND}};
+  Implication r7{{&ra10}, Formula{&NX}};
+  Implication r8{{&ra11}, Formula{&X}};
+  Implication r9{{&ra12}, Formula{&od}};
 
   // Now the rule table
   RuleTbl rules{};
