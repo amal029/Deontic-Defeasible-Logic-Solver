@@ -1,3 +1,5 @@
+#pragma once
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -12,12 +14,12 @@
 #include <vector>
 
 // The literal atom
-class Literal {
+class Atom {
 public:
-  Literal(std::string atom) : atom(atom) {}
-  Literal(const Literal &) = delete;
-  Literal(Literal &&) = default;
-  ~Literal() {}
+  Atom(std::string atom) : atom(atom) {}
+  Atom(const Atom &) = delete;
+  Atom(Atom &&) = default;
+  ~Atom() {}
   std::string toString() const { return atom; }
 
 private:
@@ -27,27 +29,27 @@ private:
 // The not for literals
 class PNot {
 public:
-  PNot(Literal *lit) : l(lit) {}
+  PNot(Atom *lit) : l(lit) {}
   PNot(const PNot &) = delete;
   PNot(PNot &&) = default;
   ~PNot() {}
   std::string toString() const { return "(Not " + l->toString() + ")"; }
-  Literal *getLiteral() const { return l; }
+  Atom *getAtom() const { return l; }
 
 private:
-  Literal *l;
+  Atom *l;
 };
 
 // The obligation deontic
 class OBL {
 public:
-  OBL(Literal *l) : pformula(l) {};
+  OBL(Atom *l) : pformula(l) {};
   OBL(PNot *n) : pformula(n) {};
   OBL(const OBL &) = delete;
   OBL(OBL &&) = default;
   ~OBL() {}
   std::string toString() const {
-    if (const auto p = std::get_if<Literal *>(&pformula)) {
+    if (const auto p = std::get_if<Atom *>(&pformula)) {
       return "(O " + (**p).toString() + ")";
     } else {
       return "(O " + std::get<PNot *>(pformula)->toString() + ")";
@@ -55,7 +57,7 @@ public:
   }
 
 private:
-  std::variant<Literal *, PNot *> pformula;
+  std::variant<Atom *, PNot *> pformula;
 };
 
 class DNot {
@@ -73,7 +75,7 @@ private:
 
 class Formula {
 public:
-  Formula(Literal *l) : formula(l) {}
+  Formula(Atom *l) : formula(l) {}
   Formula(PNot *l) : formula(l) {}
   Formula(OBL *l) : formula(l) {}
   Formula(DNot *l) : formula(l) {}
@@ -82,7 +84,7 @@ public:
   ~Formula() {}
   std::string toString() const {
     std::string ss;
-    if (const auto l = std::get_if<Literal *>(&formula)) {
+    if (const auto l = std::get_if<Atom *>(&formula)) {
       ss = (**l).toString();
     } else if (const auto p = std::get_if<PNot *>(&formula)) {
       ss = (**p).toString();
@@ -99,11 +101,11 @@ public:
     return std::holds_alternative<PNot *>(formula) ||
            std::holds_alternative<DNot *>(formula);
   }
-  bool isLiteral() const { return std::holds_alternative<Literal *>(formula); }
+  bool isAtom() const { return std::holds_alternative<Atom *>(formula); }
   bool isOBL() const { return std::holds_alternative<OBL *>(formula); }
   std::string getComplement() const {
-    if (this->isLiteral()) {
-      return PNot(std::get<Literal *>(formula)).toString();
+    if (this->isAtom()) {
+      return PNot(std::get<Atom *>(formula)).toString();
     } else if (this->isOBL()) {
       return DNot(std::get<OBL *>(formula)).toString();
     }
@@ -111,7 +113,7 @@ public:
   }
   std::string getComplementInner() const {
     if (std::holds_alternative<PNot *>(formula)) {
-      return Formula{std::get<PNot *>(formula)->getLiteral()}.toString();
+      return Formula{std::get<PNot *>(formula)->getAtom()}.toString();
     } else if (std::holds_alternative<DNot *>(formula)) {
       return Formula{std::get<DNot *>(formula)->getOBL()}.toString();
     }
@@ -119,22 +121,8 @@ public:
   }
 
 private:
-  std::variant<Literal *, PNot *, OBL *, DNot *> formula;
+  std::variant<Atom *, PNot *, OBL *, DNot *> formula;
 };
-
-// The hash for the Formula
-// struct FormulaHash {
-//   std::size_t operator()(const Formula *&s) const noexcept {
-//     return std::hash<std::string>{}(s->toString());
-//   }
-// };
-
-// // Equality of formulas
-// struct FormulaEq {
-//   bool operator()(const Formula *&lhs, const Formula *&rhs) const {
-//     return lhs->toString() == rhs->toString();
-//   }
-// };
 
 // This is the defeasible rule
 using Antecedent = std::unordered_set<Formula *>;
@@ -198,24 +186,6 @@ private:
 };
 
 using Conc = std::pair<const Formula *, uint64_t>;
-
-// // The hash for the pair
-// struct ConcHash {
-//   std::size_t operator()(const Conc &s) const noexcept {
-//     auto fhash = std::hash<std::string>{}(s.first->toString());
-//     auto shash = std::hash<int64_t>{}(s.second);
-//     return fhash ^ (shash << 1);
-//   }
-// };
-
-// // Equality of formulas
-// struct ConcEq {
-//   bool operator()(const Conc &lhs, const Conc &rhs) const {
-//     bool l = lhs.first->toString() == rhs.first->toString();
-//     bool r = lhs.second == rhs.second;
-//     return l && r;
-//   }
-// };
 
 enum class HL { HIGHER = 0, LOWER = 1 };
 
@@ -300,7 +270,7 @@ public:
     std::string fstring;
     if (v->isNot()) {
       fstring = v->getComplementInner();
-    } else if (v->isLiteral() || v->isOBL()) {
+    } else if (v->isAtom() || v->isOBL()) {
       fstring = v->getComplement();
     }
     // Now check if the conclusion has this fstring
@@ -343,7 +313,7 @@ public:
   ~Solver() {}
 
 private:
-  // Removing from conclusions and processing ad long as remove exists
+  // Removing from conclusions and processing as long as remove exists
   void backward_removal() {
     while (!remove.empty()) {
       const auto &[temp, rnum] = remove.front();
@@ -427,7 +397,6 @@ private:
                           });
             std::cout << toret << "\n";
 #endif
-            // FIXME: Remove it from processing queue too -- later
           }
         }
       }
@@ -488,58 +457,3 @@ private:
   std::deque<Conc> processing;
   std::deque<Conc> remove;
 };
-
-int main() {
-  // First declare all the literals
-  Literal A{"A"}, B{"B"}, C{"C"}, D{"D"}, L{"L"}, M{"M"}, T{"T"}, X{"X"};
-  // Now the nots if any
-  PNot ND{&D}, NX{&X};
-  // An example of a deontic
-  OBL ob = OBL(&B), od = OBL(&D);
-
-  // Declare the formulas to be used
-  Formula ra1 = Formula{&A};
-  Formula ra2 = Formula{&ob};
-  Formula ra3 = Formula{&ob}, ra4 = Formula{&C};
-  Formula ra5{&L};
-  Formula ra6{&A};
-  Formula ra7{&M};
-  Formula ra8{&od};
-  Formula ra9{&T};
-  Formula ra10{&D};
-  Formula ra11{&ND};
-  Formula ra12{&L};
-  
-  // Now the implications (defeasible rules)
-  Implication r1{{&ra1}, Formula(&ob)};
-  Implication r2{{&ra2}, Formula{&C}};
-  Implication r3{{&ra3, &ra4}, Formula{&D}};
-  Implication r4{{&ra5}, Formula{&M}};
-  Implication r5{{&ra6, &ra7, &ra8}, Formula{&T}};
-  Implication r6{{&ra9}, Formula{&ND}};
-  Implication r7{{&ra10}, Formula{&NX}};
-  Implication r8{{&ra11}, Formula{&X}};
-  Implication r9{{&ra12}, Formula{&od}};
-
-  // Now the rule table
-  RuleTbl rules{};
-  rules.insert(1, std::move(r1));
-  rules.insert(2, std::move(r2));
-  rules.insert(3, std::move(r3));
-  rules.insert(4, std::move(r4));
-  rules.insert(5, std::move(r5));
-  rules.insert(6, std::move(r6));
-  rules.insert(7, std::move(r7));
-  rules.insert(8, std::move(r8));
-  rules.insert(9, std::move(r9));
-
-  // Now the facts
-  Formula f1{&A}, f2{&L};
-  Solver s{{&f1, &f2}, &rules, {{6, 1}}};
-  std::cout << s.toString() << "\n";
-  // Now we can check if the rules are satisfied
-  if (s.check())
-    // Get the model after checking
-    std::cout << s.toString() << "\n";
-  return 0;
-}
