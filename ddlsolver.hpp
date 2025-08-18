@@ -1,10 +1,12 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <initializer_list>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -17,111 +19,187 @@
 class Atom {
 public:
   Atom(std::string atom) : atom(atom) {}
-  Atom(const Atom &) = delete;
+  Atom(const Atom &) = default;
   Atom(Atom &&) = default;
   ~Atom() {}
   std::string toString() const { return atom; }
+
+  Atom substituteProp(const char *y) { return Atom(y); }
 
 private:
   std::string atom;
 };
 
+// We need the variable class/type
+class Variable {
+public:
+  Variable(const char *name) : name(name) {}
+  ~Variable() {}
+  std::string toString() const { return "Var(" + name + ")"; }
+
+private:
+  std::string name;
+};
+
+// Now need the predicate class
+using PredicateType = std::variant<Variable, Atom>;
+class Predicate {
+public:
+  Predicate(std::string name, std::initializer_list<PredicateType> &args)
+      : name(name), args(args) {}
+  Predicate(std::string name, std::vector<PredicateType> &args)
+      : name(name), args(args) {}
+
+  ~Predicate() {}
+  std::string toString() {
+    std::string toret{};
+    size_t counter = 0;
+    for (auto it = args.cbegin(); it != args.cend(); ++it) {
+      if (std::holds_alternative<Variable>(*it)) {
+        toret += std::get<Variable>(*it).toString();
+      } else {
+        toret += std::get<Atom>(*it).toString();
+      }
+      if (counter < args.size() - 1)
+        toret += ", ";
+      counter += 1;
+    }
+    return name + "(" + toret + ")";
+  }
+
+  Predicate subsVartoAtom(const Variable &x, const char *y) {
+    std::vector<PredicateType> argsc;
+    argsc.reserve(args.size());
+    // TODO: Fill this transform in
+    std::transform(args.cbegin(), args.cend(), argsc.begin(),
+                   [](const PredicateType &x) {});
+    return Predicate(name, argsc);
+  }
+
+private:
+  std::vector<PredicateType> args;
+  std::string name;
+};
+
 // The not for literals
 class PNot {
 public:
-  PNot(Atom *lit) : l(lit) {}
-  PNot(const PNot &) = delete;
+  PNot(Atom lit) : l(lit) {}
+  PNot(const PNot &) = default;
   PNot(PNot &&) = default;
   ~PNot() {}
-  std::string toString() const { return "(Not " + l->toString() + ")"; }
-  Atom *getAtom() const { return l; }
+  std::string toString() const { return "(Not " + l.toString() + ")"; }
+  const Atom &getAtom() const { return l; }
+  PNot substituteProp(const char *y) { return PNot(l.substituteProp(y)); }
 
 private:
-  Atom *l;
+  Atom l;
 };
 
 // The obligation deontic
 class OBL {
 public:
-  OBL(Atom *l) : pformula(l) {};
-  OBL(PNot *n) : pformula(n) {};
-  OBL(const OBL &) = delete;
+  OBL(Atom l) : pformula(l) {};
+  OBL(PNot n) : pformula(n) {};
+  OBL(const OBL &) = default;
   OBL(OBL &&) = default;
   ~OBL() {}
   std::string toString() const {
-    if (const auto p = std::get_if<Atom *>(&pformula)) {
-      return "(O " + (**p).toString() + ")";
+    if (const auto p = std::get_if<Atom>(&pformula)) {
+      return "(O " + (*p).toString() + ")";
     } else {
-      return "(O " + std::get<PNot *>(pformula)->toString() + ")";
+      return "(O " + std::get<PNot>(pformula).toString() + ")";
+    }
+  }
+
+  OBL substituteProp(const char *&y) {
+    if (std::holds_alternative<Atom>(pformula)) {
+      return OBL(std::get<Atom>(pformula).substituteProp(y));
+    } else {
+      return OBL(std::get<PNot>(pformula).substituteProp(y));
     }
   }
 
 private:
-  std::variant<Atom *, PNot *> pformula;
+  std::variant<Atom, PNot> pformula;
 };
 
 class DNot {
 public:
-  DNot(OBL *o) : o(o) {}
-  DNot(const DNot &) = delete;
+  DNot(OBL o) : o(o) {}
+  DNot(const DNot &) = default;
   DNot(DNot &&) = default;
   ~DNot() {}
-  std::string toString() const { return "(Not " + o->toString() + ")"; }
-  OBL *getOBL() const { return o; }
+  std::string toString() const { return "(Not " + o.toString() + ")"; }
+  const OBL &getOBL() const { return o; }
+
+  DNot substituteProp(const char *y) { return o.substituteProp(y); }
 
 private:
-  OBL *o;
+  OBL o;
 };
 
 class Formula {
 public:
-  Formula(Atom *l) : formula(l) {}
-  Formula(PNot *l) : formula(l) {}
-  Formula(OBL *l) : formula(l) {}
-  Formula(DNot *l) : formula(l) {}
-  Formula(const Formula &) = delete;
+  Formula(Atom l) : formula(l) {}
+  Formula(PNot l) : formula(l) {}
+  Formula(OBL l) : formula(l) {}
+  Formula(DNot l) : formula(l) {}
+  Formula(const Formula &) = default;
   Formula(Formula &&) = default;
   ~Formula() {}
   std::string toString() const {
     std::string ss;
-    if (const auto l = std::get_if<Atom *>(&formula)) {
-      ss = (**l).toString();
-    } else if (const auto p = std::get_if<PNot *>(&formula)) {
-      ss = (**p).toString();
-    } else if (const auto o = std::get_if<OBL *>(&formula)) {
-      ss = (**o).toString();
-    } else if (const auto d = std::get_if<DNot *>(&formula)) {
-      ss = (**d).toString();
+    if (const auto l = std::get_if<Atom>(&formula)) {
+      ss = (*l).toString();
+    } else if (const auto p = std::get_if<PNot>(&formula)) {
+      ss = (*p).toString();
+    } else if (const auto o = std::get_if<OBL>(&formula)) {
+      ss = (*o).toString();
+    } else if (const auto d = std::get_if<DNot>(&formula)) {
+      ss = (*d).toString();
     }
     return ss;
   }
 
+  Formula substituteProp(const char *y) {
+    if (std::holds_alternative<Atom>(formula)) {
+      return Formula(std::get<Atom>(formula).substituteProp(y));
+    } else if (std::holds_alternative<PNot>(formula)) {
+      return Formula(std::get<PNot>(formula).substituteProp(y));
+    } else if (std::holds_alternative<OBL>(formula)) {
+      return Formula(std::get<OBL>(formula).substituteProp(y));
+    } else {
+      return Formula(std::get<DNot>(formula).substituteProp(y));
+    }
+  }
+
   // Is this a complement.
   bool isNot() const {
-    return std::holds_alternative<PNot *>(formula) ||
-           std::holds_alternative<DNot *>(formula);
+    return std::holds_alternative<PNot>(formula) ||
+           std::holds_alternative<DNot>(formula);
   }
-  bool isAtom() const { return std::holds_alternative<Atom *>(formula); }
-  bool isOBL() const { return std::holds_alternative<OBL *>(formula); }
+  bool isAtom() const { return std::holds_alternative<Atom>(formula); }
+  bool isOBL() const { return std::holds_alternative<OBL>(formula); }
   std::string getComplement() const {
     if (this->isAtom()) {
-      return PNot(std::get<Atom *>(formula)).toString();
+      return PNot(std::get<Atom>(formula)).toString();
     } else if (this->isOBL()) {
-      return DNot(std::get<OBL *>(formula)).toString();
+      return DNot(std::get<OBL>(formula)).toString();
     }
     return "";
   }
   std::string getComplementInner() const {
-    if (std::holds_alternative<PNot *>(formula)) {
-      return Formula{std::get<PNot *>(formula)->getAtom()}.toString();
-    } else if (std::holds_alternative<DNot *>(formula)) {
-      return Formula{std::get<DNot *>(formula)->getOBL()}.toString();
+    if (std::holds_alternative<PNot>(formula)) {
+      return Formula{std::get<PNot>(formula).getAtom()}.toString();
+    } else if (std::holds_alternative<DNot>(formula)) {
+      return Formula{std::get<DNot>(formula).getOBL()}.toString();
     }
     return "";
   }
 
 private:
-  std::variant<Atom *, PNot *, OBL *, DNot *> formula;
+  std::variant<Atom, PNot, OBL, DNot> formula;
 };
 
 // This is the defeasible rule
