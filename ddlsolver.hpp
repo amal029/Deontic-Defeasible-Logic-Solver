@@ -122,6 +122,7 @@ public:
   bool getMatchingPredicate(const Predicate &x) const {
     return (x.getName() == name) && (x.getArity() == getArity());
   }
+  const std::vector<PredicateType> &getArgs() const { return args; }
 
 private:
   std::vector<PredicateType> args;
@@ -135,6 +136,7 @@ public:
   PNot(Atom lit) : l(lit) {}
   PNot(Predicate lit) : l(lit) {}
   PNot(const PNot &) = default;
+  PNot &operator=(const PNot &) = default;
   PNot(PNot &&) = default;
   ~PNot() {}
   std::string toString() const {
@@ -169,6 +171,14 @@ public:
       return std::get<Predicate>(l).getMatchingPredicate(x);
     } else
       return false;
+  }
+
+  PNot subsVartoAtom(const Variable &x, const char *y) const {
+    if (std::holds_alternative<Predicate>(l)) {
+      return std::get<Predicate>(l).subsVartoAtom(x, y);
+    } else
+      return *this;
+    
   }    
 
 private:
@@ -181,6 +191,7 @@ public:
   OBL(Atom l) : pformula(l) {};
   OBL(PNot n) : pformula(n) {};
   OBL(const OBL &) = default;
+  OBL &operator=(const OBL &) = default;
   OBL(OBL &&) = default;
   ~OBL() {}
   std::string toString() const {
@@ -220,6 +231,13 @@ public:
       return false;
   }
 
+  OBL subsVartoAtom(const Variable &x, const char *y) const {
+    if (std::holds_alternative<PNot>(pformula)) {
+      return std::get<PNot>(pformula).subsVartoAtom(x, y);
+    } else
+      return *this;
+  }
+
 private:
   std::variant<Atom, PNot> pformula;
 };
@@ -228,6 +246,7 @@ class DNot {
 public:
   DNot(OBL o) : o(o) {}
   DNot(const DNot &) = default;
+  DNot &operator=(const DNot &) = default;
   DNot(DNot &&) = default;
   ~DNot() {}
   std::string toString() const { return "(Not " + o.toString() + ")"; }
@@ -241,6 +260,10 @@ public:
   bool getMatchingPredicate(const Predicate &x) const {
     return o.getMatchingPredicate(x);
   }
+  OBL subsVartoAtom(const Variable &x, const char *y) const {
+    return o.subsVartoAtom(x, y);
+  }
+
   std::optional<Predicate> getPredicate() const { return o.getPredicate(); }
 
 private:
@@ -255,6 +278,7 @@ public:
   Formula(OBL l) : formula(std::move(l)) {}
   Formula(DNot l) : formula(std::move(l)) {}
   Formula(const Formula &) = default;
+  Formula &operator=(const Formula &) = default;
   Formula(Formula &&) = default;
   ~Formula() {}
   std::string toString() const {
@@ -364,6 +388,20 @@ public:
     }
   }
 
+  Formula subsVartoAtom(const Variable &x, const char *y) const {
+    if (std::holds_alternative<Atom>(formula)) {
+      return *this;
+    } else if (std::holds_alternative<PNot>(formula)) {
+      return std::get<PNot>(formula).subsVartoAtom(x, y);
+    } else if (std::holds_alternative<OBL>(formula)) {
+      return std::get<OBL>(formula).subsVartoAtom(x, y);
+    } else if (std::holds_alternative<DNot>(formula)) {
+      return std::get<DNot>(formula).subsVartoAtom(x, y);
+    } else {
+      return std::get<Predicate>(formula).subsVartoAtom(x, y);
+    }
+  }    
+
 private:
   std::variant<Atom, PNot, OBL, DNot, Predicate> formula;
 };
@@ -390,6 +428,7 @@ public:
       : antecedents(std::move(antecedents)), consequent(std::move(l)) {}
   ~Implication() {}
   Implication(const Implication &) = default;
+  Implication &operator=(const Implication &) = default;
   Implication(Implication &&) = default;
   const Formula *getConsequent() const { return &consequent; }
   const Antecedent &getAntecedents() const { return antecedents; }
@@ -402,7 +441,7 @@ public:
     toret += "} => " + consequent.toString();
     return toret;
   }
-  
+
   bool hasVariables() const {
     return std::accumulate(antecedents.cbegin(), antecedents.cend(), false,
                            [](const bool &val, const Formula &x) {
@@ -420,6 +459,16 @@ public:
                         [](const Formula &x) { return x.hasVariables(); });
     }
     return toret;
+  }
+
+  Implication subsVartoAtom(const Variable &v, const char *atom) const {
+    // Go through all the antecedents and replace the variable with the
+    // atom
+    Antecedent rantecedents{};
+    std::transform(antecedents.cbegin(), antecedents.cend(), rantecedents,
+                   [&v, &atom](const Formula &x) { x.subsVartoAtom(v, atom); });
+    Formula rconsequent = consequent.subsVartoAtom(v, atom);
+    return Implication(std::move(rantecedents), std::move(rconsequent));
   }
 
 private:
@@ -534,10 +583,11 @@ public:
       // Now enable all the possible implications
       for (auto it = ruletbl->begin(); it != ruletbl->end(); ++it) {
         if (!it->second.getDone() && it->second.hasVariables()) {
-          // TODO: We need to perform unification here
+          // XXX: We perform unification here
           Implication out = it->second;
-          if (unify(out) && check_antecedents(out)) {
-            std::get<1>(*it).setDone();
+          if (unify(out)) {
+            std::get<1>(*it)
+                .setDone(); // setting the original implication as done
             processing.push_back({out.getConsequent(), std::get<0>(*it)});
           }
         }
@@ -552,8 +602,7 @@ public:
     return ret;
   }
 
-  std::vector<Predicate>
-  getConclusionPredicate(const Predicate &in) {
+  std::vector<Predicate> getConclusionPredicate(const Predicate &in) {
     auto it = std::find_if(
         conclusions.cbegin(), conclusions.cend(),
         [&in](const Conc &x) { return (x.first)->getMatchingPredicate(in); });
@@ -592,7 +641,7 @@ public:
       if (concps.size() != ps.size())
         break;
 
-      // Make the cartresian product if ps.size() > 1
+      // 2. Make the cartresian product if ps.size() > 1
       std::vector<std::vector<Predicate>> cartresianconcps;
       if (ps.size() > 1) {
         std::vector<std::vector<Predicate>> concprod{concps[0]};
@@ -609,15 +658,56 @@ public:
               return res;
             });
       }
-      // Now we have the cartresian product of the conclusion
+      // 3. Now we have the cartresian product of the conclusion
       // predicates. Now we can start performing substitution.
+      Implication temp = out;
       for (const auto &x : cartresianconcps) {
         assert(x.size() == ps.size()); // This has to hold!
-                                       // TODO:
-        assert(false);
+        for (size_t i = 0; i < ps.size(); ++i) {
+          const Predicate &concp = x[i];
+          const Predicate &implp = ps[i];
+          std::unordered_map<Variable, Atom> subs;
+          if (!getSubstitutes(concp, implp, subs))
+            break;
+          // Now replace all the variables with Atoms in the
+          // Implication.
+          for (const auto &[key, value] : subs)
+            temp = temp.subsVartoAtom(key, value.toString().c_str());
+        }
+        // Now check if antecendets are satisfied
+        if (check_antecedents(temp)) {
+          toret = true;
+          out = temp;
+          break;
+        }
+      }
+      if (toret)
+        break;
+    }
+    return toret;
+  }
+
+  // XXX: For each of the impl predicate variables replace the
+  // conc predicate Atom. If the impl predicate arg is Atom then
+  // it should match the conc predicate arg Atom.
+  bool getSubstitutes(const Predicate &concp, const Predicate &implp,
+                      std::unordered_map<Variable, Atom> &subs) {
+    bool toret = true;
+    assert(concp.getName() == implp.getName());
+    assert(concp.getArity() == implp.getArity());
+    for (size_t i = 0; i < concp.getArity(); ++i) {
+      auto &concp_arg = concp.getArgs()[i];
+      auto &implp_arg = implp.getArgs()[i];
+      assert(!std::holds_alternative<Variable>(concp_arg));
+      if (std::holds_alternative<Variable>(implp_arg)) {
+        subs.insert({std::get<Variable>(implp_arg), std::get<Atom>(concp_arg)});
+      } else {
+        // The atoms should match
+        toret &= (std::get<Atom>(concp_arg).toString() ==
+                  std::get<Atom>(implp_arg).toString());
       }
     }
-  END: return toret;
+    return toret;
   }
 
   bool check_contradiction(const Formula *v) {
