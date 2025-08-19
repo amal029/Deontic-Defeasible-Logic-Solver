@@ -6,8 +6,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <initializer_list>
 #include <iostream>
+#include <numeric>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -18,13 +21,20 @@
 // The literal atom
 class Atom {
 public:
-  Atom(std::string atom) : atom(atom) {}
+  Atom(const char* atom) : atom(atom) {}
   Atom(const Atom &) = default;
   Atom(Atom &&) = default;
+  Atom &operator=(const Atom &other) = default;
+  Atom &operator=(Atom &&other) = default;
   ~Atom() {}
   std::string toString() const { return atom; }
 
-  Atom substituteProp(const char *y) { return Atom(y); }
+  Atom substituteProp(const Atom &x, const char *y) const {
+    if (x.toString() == this->atom) {
+      return Atom(y);
+    } else
+      return *this;
+  }
 
 private:
   std::string atom;
@@ -36,6 +46,7 @@ public:
   Variable(const char *name) : name(name) {}
   ~Variable() {}
   std::string toString() const { return "Var(" + name + ")"; }
+  const std::string &getName() const { return name; }
 
 private:
   std::string name;
@@ -45,13 +56,13 @@ private:
 using PredicateType = std::variant<Variable, Atom>;
 class Predicate {
 public:
-  Predicate(std::string name, std::initializer_list<PredicateType> &args)
-      : name(name), args(args) {}
-  Predicate(std::string name, std::vector<PredicateType> &args)
-      : name(name), args(args) {}
+  Predicate(std::string &&name, std::initializer_list<PredicateType> &&args)
+      : args(std::move(args)), name(std::move(name)) {}
+  Predicate(std::string name, std::vector<PredicateType> &&args)
+      : args(std::move(args)), name(std::move(name)) {}
 
   ~Predicate() {}
-  std::string toString() {
+  std::string toString() const {
     std::string toret{};
     size_t counter = 0;
     for (auto it = args.cbegin(); it != args.cend(); ++it) {
@@ -67,13 +78,49 @@ public:
     return name + "(" + toret + ")";
   }
 
-  Predicate subsVartoAtom(const Variable &x, const char *y) {
+  bool hasVariables() const {
+    // accumulate the args inside this to check if there are any vars in
+    // here!
+    return std::accumulate(args.cbegin(), args.cend(), false,
+                           [](const bool &y, const PredicateType &x) {
+                             return y || std::holds_alternative<Variable>(x);
+                           });
+  }
+
+  Predicate subsVartoAtom(const Variable &x, const char *y) const {
     std::vector<PredicateType> argsc;
     argsc.reserve(args.size());
-    // TODO: Fill this transform in
     std::transform(args.cbegin(), args.cend(), argsc.begin(),
-                   [](const PredicateType &x) {});
-    return Predicate(name, argsc);
+                   [&x, &y](const PredicateType &z) -> PredicateType {
+                     if (std::holds_alternative<Variable>(z)) {
+                       if (std::get<Variable>(z).getName() == x.getName()) {
+                         return Atom(y);
+                       } else
+                         return z;
+                     } else
+                       return z;
+                   });
+    return Predicate{name, std::move(argsc)};
+  }
+
+  Predicate substituteProp(const Atom &x, const char *y) const {
+    std::vector<PredicateType> rargs;
+    rargs.reserve(args.size());
+    std::transform(args.begin(), args.end(), rargs.begin(),
+                   [&x, &y](const PredicateType &z) -> PredicateType {
+                     if (std::holds_alternative<Atom>(z)) {
+                       return std::get<Atom>(z).substituteProp(x, y);
+                     } else
+                       return z;
+                   });
+    return Predicate{name, std::move(rargs)};
+  }
+
+  const std::string &getName() const { return name; }
+  const size_t getArity() const { return args.size(); }
+
+  bool getMatchingPredicate(const Predicate &x) const {
+    return (x.getName() == name) && (x.getArity() == getArity());
   }
 
 private:
@@ -81,19 +128,51 @@ private:
   std::string name;
 };
 
+using LiteralType = std::variant<Atom, Predicate>;
 // The not for literals
 class PNot {
 public:
   PNot(Atom lit) : l(lit) {}
+  PNot(Predicate lit) : l(lit) {}
   PNot(const PNot &) = default;
   PNot(PNot &&) = default;
   ~PNot() {}
-  std::string toString() const { return "(Not " + l.toString() + ")"; }
-  const Atom &getAtom() const { return l; }
-  PNot substituteProp(const char *y) { return PNot(l.substituteProp(y)); }
+  std::string toString() const {
+    if (std::holds_alternative<Atom>(l)) {
+      return std::get<Atom>(l).toString();
+    } else
+      return std::get<Predicate>(l).toString();
+  }
+  const LiteralType &getLiteral() const { return l; }
+  PNot substituteProp(const Atom &x, const char *y) const {
+    if (std::holds_alternative<Atom>(l)) {
+      return PNot(std::get<Atom>(l).substituteProp(x, y));
+    } else
+      return PNot(std::get<Predicate>(l).substituteProp(x, y));
+  }
+  bool hasVariables() const {
+    if (std::holds_alternative<Predicate>(l)) {
+      return std::get<Predicate>(l).hasVariables();
+    } else
+      return false;
+  }
+
+  std::optional<Predicate> getPredicate() const {
+    if (std::holds_alternative<Predicate>(l)) {
+      return std::get<Predicate>(l);
+    } else
+      return {};
+  }
+
+  bool getMatchingPredicate(const Predicate &x) const {
+    if (std::holds_alternative<Predicate>(l)) {
+      return std::get<Predicate>(l).getMatchingPredicate(x);
+    } else
+      return false;
+  }    
 
 private:
-  Atom l;
+  LiteralType l;
 };
 
 // The obligation deontic
@@ -112,12 +191,33 @@ public:
     }
   }
 
-  OBL substituteProp(const char *&y) {
+  OBL substituteProp(const Atom &x, const char *&y) const {
     if (std::holds_alternative<Atom>(pformula)) {
-      return OBL(std::get<Atom>(pformula).substituteProp(y));
+      return OBL(std::get<Atom>(pformula).substituteProp(x, y));
     } else {
-      return OBL(std::get<PNot>(pformula).substituteProp(y));
+      return OBL(std::get<PNot>(pformula).substituteProp(x, y));
     }
+  }
+
+  bool hasVariables() const {
+    if (std::holds_alternative<PNot>(pformula)) {
+      return std::get<PNot>(pformula).hasVariables();
+    } else
+      return false;
+  }
+
+  std::optional<Predicate> getPredicate() const {
+    if (std::holds_alternative<PNot>(pformula)) {
+      return std::get<PNot>(pformula).getPredicate();
+    } else
+      return {};
+  }
+
+  bool getMatchingPredicate(const Predicate &x) const {
+    if (std::holds_alternative<PNot>(pformula)) {
+      return std::get<PNot>(pformula).getMatchingPredicate(x);
+    } else
+      return false;
   }
 
 private:
@@ -133,7 +233,15 @@ public:
   std::string toString() const { return "(Not " + o.toString() + ")"; }
   const OBL &getOBL() const { return o; }
 
-  DNot substituteProp(const char *y) { return o.substituteProp(y); }
+  DNot substituteProp(const Atom &x, const char *y) const {
+    return o.substituteProp(x, y);
+  }
+
+  bool hasVariables() const { return o.hasVariables(); }
+  bool getMatchingPredicate(const Predicate &x) const {
+    return o.getMatchingPredicate(x);
+  }
+  std::optional<Predicate> getPredicate() const { return o.getPredicate(); }
 
 private:
   OBL o;
@@ -141,10 +249,11 @@ private:
 
 class Formula {
 public:
-  Formula(Atom l) : formula(l) {}
-  Formula(PNot l) : formula(l) {}
-  Formula(OBL l) : formula(l) {}
-  Formula(DNot l) : formula(l) {}
+  Formula(Atom l) : formula(std::move(l)) {}
+  Formula(Predicate l) : formula(std::move(l)) {}
+  Formula(PNot l) : formula(std::move(l)) {}
+  Formula(OBL l) : formula(std::move(l)) {}
+  Formula(DNot l) : formula(std::move(l)) {}
   Formula(const Formula &) = default;
   Formula(Formula &&) = default;
   ~Formula() {}
@@ -158,19 +267,39 @@ public:
       ss = (*o).toString();
     } else if (const auto d = std::get_if<DNot>(&formula)) {
       ss = (*d).toString();
+    } else if (const auto d = std::get_if<Predicate>(&formula)) {
+      ss = (*d).toString();
     }
     return ss;
   }
 
-  Formula substituteProp(const char *y) {
+  // Get the predicate version of this formula
+  std::optional<Predicate> getPredicate() const {
     if (std::holds_alternative<Atom>(formula)) {
-      return Formula(std::get<Atom>(formula).substituteProp(y));
+      return {};
     } else if (std::holds_alternative<PNot>(formula)) {
-      return Formula(std::get<PNot>(formula).substituteProp(y));
+      return std::get<PNot>(formula).getPredicate();
     } else if (std::holds_alternative<OBL>(formula)) {
-      return Formula(std::get<OBL>(formula).substituteProp(y));
+      return std::get<OBL>(formula).getPredicate();
+    } else if (std::holds_alternative<DNot>(formula)) {
+      return std::get<DNot>(formula).getPredicate();
     } else {
-      return Formula(std::get<DNot>(formula).substituteProp(y));
+      return std::get<Predicate>(formula);
+    }
+  }
+
+  Formula substituteProp(const Atom &x, const char *y) const {
+    if (std::holds_alternative<Atom>(formula)) {
+      return Formula(std::get<Atom>(formula).substituteProp(x, y));
+    } else if (std::holds_alternative<PNot>(formula)) {
+      return Formula(std::get<PNot>(formula).substituteProp(x, y));
+    } else if (std::holds_alternative<OBL>(formula)) {
+      return Formula(std::get<OBL>(formula).substituteProp(x, y));
+    } else if (std::holds_alternative<DNot>(formula)) {
+      return Formula(std::get<DNot>(formula).substituteProp(x, y));
+    } else {
+      // This is the predicate case
+      return Formula{std::get<Predicate>(formula).substituteProp(x, y)};
     }
   }
 
@@ -180,36 +309,87 @@ public:
            std::holds_alternative<DNot>(formula);
   }
   bool isAtom() const { return std::holds_alternative<Atom>(formula); }
+  bool isPredicate() const {
+    return std::holds_alternative<Predicate>(formula);
+  }
   bool isOBL() const { return std::holds_alternative<OBL>(formula); }
   std::string getComplement() const {
     if (this->isAtom()) {
       return PNot(std::get<Atom>(formula)).toString();
     } else if (this->isOBL()) {
       return DNot(std::get<OBL>(formula)).toString();
+    } else if (this->isPredicate()) {
+      return PNot(std::get<Predicate>(formula)).toString();
     }
     return "";
   }
   std::string getComplementInner() const {
     if (std::holds_alternative<PNot>(formula)) {
-      return Formula{std::get<PNot>(formula).getAtom()}.toString();
+      auto x = std::get<PNot>(formula).getLiteral();
+      if (std::holds_alternative<Atom>(x)) {
+        return std::get<Atom>(x).toString();
+      } else
+        return std::get<Predicate>(x).toString();
     } else if (std::holds_alternative<DNot>(formula)) {
-      return Formula{std::get<DNot>(formula).getOBL()}.toString();
+      return std::get<DNot>(formula).getOBL().toString();
     }
     return "";
   }
 
+  bool hasVariables() const {
+    if (std::holds_alternative<Atom>(formula)) {
+      return false;
+    } else if (std::holds_alternative<PNot>(formula)) {
+      return std::get<PNot>(formula).hasVariables();
+    } else if (std::holds_alternative<OBL>(formula)) {
+      return std::get<OBL>(formula).hasVariables();
+    } else if (std::holds_alternative<DNot>(formula)) {
+      return std::get<DNot>(formula).hasVariables();
+    } else {
+      return std::get<Predicate>(formula).hasVariables();
+    }
+  }
+
+  bool getMatchingPredicate(const Predicate &x) const {
+    if (std::holds_alternative<Atom>(formula)) {
+      return false;
+    } else if (std::holds_alternative<PNot>(formula)) {
+      return std::get<PNot>(formula).getMatchingPredicate(x);
+    } else if (std::holds_alternative<OBL>(formula)) {
+      return std::get<OBL>(formula).getMatchingPredicate(x);
+    } else if (std::holds_alternative<DNot>(formula)) {
+      return std::get<DNot>(formula).getMatchingPredicate(x);
+    } else {
+      return std::get<Predicate>(formula).getMatchingPredicate(x);
+    }
+  }
+
 private:
-  std::variant<Atom, PNot, OBL, DNot> formula;
+  std::variant<Atom, PNot, OBL, DNot, Predicate> formula;
+};
+
+// The Formula hash
+struct FormulaHash {
+  std::size_t operator()(const Formula &s) const noexcept {
+    return std::hash<std::string>{}(s.toString());
+  }
+};
+
+// The Formula equality
+struct FormulaEq {
+  bool operator()(const Formula &lhs, const Formula &rhs) const {
+    return lhs.toString() == rhs.toString();
+  }
 };
 
 // This is the defeasible rule
-using Antecedent = std::unordered_set<Formula *>;
+using Antecedent = std::unordered_set<Formula, FormulaHash, FormulaEq>;
 class Implication {
 public:
   Implication(Antecedent &&antecedents, Formula &&l)
       : antecedents(std::move(antecedents)), consequent(std::move(l)) {}
   ~Implication() {}
-  Implication(const Implication &) = delete;
+  Implication(const Implication &) = default;
   Implication(Implication &&) = default;
   const Formula *getConsequent() const { return &consequent; }
   const Antecedent &getAntecedents() const { return antecedents; }
@@ -218,8 +398,27 @@ public:
   std::string toString() const {
     std::string toret = "{";
     for (auto it = antecedents.cbegin(); it != antecedents.cend(); ++it)
-      toret += (*it)->toString() + " ";
+      toret += (*it).toString() + " ";
     toret += "} => " + consequent.toString();
+    return toret;
+  }
+  
+  bool hasVariables() const {
+    return std::accumulate(antecedents.cbegin(), antecedents.cend(), false,
+                           [](const bool &val, const Formula &x) {
+                             return val || x.hasVariables();
+                           });
+  }
+
+  std::vector<Predicate> getPredicateWithVar() const {
+    auto it = std::find_if(antecedents.cbegin(), antecedents.cend(),
+                           [](const Formula &x) { return x.hasVariables(); });
+    std::vector<Predicate> toret;
+    while (it != antecedents.cend()) {
+      toret.push_back(it->getPredicate().value());
+      it = std::find_if(it, antecedents.cend(),
+                        [](const Formula &x) { return x.hasVariables(); });
+    }
     return toret;
   }
 
@@ -334,8 +533,16 @@ public:
 #endif
       // Now enable all the possible implications
       for (auto it = ruletbl->begin(); it != ruletbl->end(); ++it) {
+        if (!it->second.getDone() && it->second.hasVariables()) {
+          // TODO: We need to perform unification here
+          Implication out = it->second;
+          if (unify(out) && check_antecedents(out)) {
+            std::get<1>(*it).setDone();
+            processing.push_back({out.getConsequent(), std::get<0>(*it)});
+          }
+        }
         // Now check if all antecedents are satisfied.
-        if (!it->second.getDone() && check_antecedents(std::get<1>(*it))) {
+        else if (!it->second.getDone() && check_antecedents(std::get<1>(*it))) {
           std::get<1>(*it).setDone();
           processing.push_back(
               {std::get<1>(*it).getConsequent(), std::get<0>(*it)});
@@ -344,6 +551,75 @@ public:
     }
     return ret;
   }
+
+  std::vector<Predicate>
+  getConclusionPredicate(const Predicate &in) {
+    auto it = std::find_if(
+        conclusions.cbegin(), conclusions.cend(),
+        [&in](const Conc &x) { return (x.first)->getMatchingPredicate(in); });
+    std::vector<Predicate> toret;
+    while (it != conclusions.cend()) {
+      toret.push_back(it->first->getPredicate().value());
+      it = std::find_if(it, conclusions.cend(), [&in](const Conc &x) {
+        return (x.first)->getMatchingPredicate(in);
+      });
+    }
+    return toret;
+  }
+
+  // This can possibly be NP-hard
+  bool unify(Implication &out) {
+    bool toret = false;
+    while (true) {
+      // Go through every predicate (with a variable) one by one
+      std::vector<Predicate> ps = out.getPredicateWithVar();
+      if (ps.empty())
+        break; // No predicates with variables to unify
+
+      // Here we need to find the substitution for the variable(s)
+
+      // 1. Get the predicate with same name and arity from the
+      // conclusions.
+      std::vector<std::vector<Predicate>> concps;
+      concps.reserve(ps.size());
+      for (const auto &x : ps) {
+        auto res = getConclusionPredicate(x);
+        if (res.empty())
+          break; // Some predicate has no known fact
+        else
+          concps.push_back(res);
+      }
+      if (concps.size() != ps.size())
+        break;
+
+      // Make the cartresian product if ps.size() > 1
+      std::vector<std::vector<Predicate>> cartresianconcps;
+      if (ps.size() > 1) {
+        std::vector<std::vector<Predicate>> concprod{concps[0]};
+        cartresianconcps = std::accumulate(
+            concps.cbegin() + 1, concps.cend(), concprod,
+            [](const std::vector<Predicate> &f, const std::vector<Predicate> &s)
+                -> std::vector<std::vector<Predicate>> {
+              std::vector<std::vector<Predicate>> res;
+              for (const Predicate &x : f) {
+                for (const Predicate &y : s) {
+                  res.push_back({y, x});
+                }
+              }
+              return res;
+            });
+      }
+      // Now we have the cartresian product of the conclusion
+      // predicates. Now we can start performing substitution.
+      for (const auto &x : cartresianconcps) {
+        assert(x.size() == ps.size()); // This has to hold!
+                                       // TODO:
+        assert(false);
+      }
+    }
+  END: return toret;
+  }
+
   bool check_contradiction(const Formula *v) {
     std::string fstring;
     if (v->isNot()) {
@@ -411,7 +687,7 @@ private:
 #endif
           auto fit = std::find_if(
               trule.getAntecedents().begin(), trule.getAntecedents().end(),
-              [&stemp](const Formula *x) { return x->toString() == stemp; });
+              [&stemp](const Formula &x) { return x.toString() == stemp; });
 
           if (fit != trule.getAntecedents().end()) {
             // We have the rule. Now get iterator from the conclusion
@@ -489,7 +765,7 @@ private:
     }
     size_t counter = 0;
     for (const auto &x : rule.getAntecedents()) {
-      if (std::find(cons.cbegin(), cons.cend(), x->toString()) != cons.end())
+      if (std::find(cons.cbegin(), cons.cend(), x.toString()) != cons.end())
         counter++;
     }
     return (counter == rule.getAntecedents().size());

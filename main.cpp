@@ -22,15 +22,15 @@ int main() {
   Formula ra12{L};
   
   // Now the implications (defeasible rules)
-  Implication r1{{&ra1}, Formula(ob)};
-  Implication r2{{&ra2}, Formula{C}};
-  Implication r3{{&ra3, &ra4}, Formula{D}};
-  Implication r4{{&ra5}, Formula{M}};
-  Implication r5{{&ra6, &ra7, &ra8}, Formula{T}};
-  Implication r6{{&ra9}, Formula{ND}};
-  Implication r7{{&ra10}, Formula{NX}};
-  Implication r8{{&ra11}, Formula{X}};
-  Implication r9{{&ra12}, Formula{od}};
+  Implication r1{{ra1}, Formula(ob)};
+  Implication r2{{ra2}, Formula{C}};
+  Implication r3{{ra3, ra4}, Formula{D}};
+  Implication r4{{ra5}, Formula{M}};
+  Implication r5{{ra6, ra7, ra8}, Formula{T}};
+  Implication r6{{ra9}, Formula{ND}};
+  Implication r7{{ra10}, Formula{NX}};
+  Implication r8{{ra11}, Formula{X}};
+  Implication r9{{ra12}, Formula{od}};
 
   // Now the rule table
   RuleTbl rules{};
