@@ -449,10 +449,9 @@ public:
                            });
   }
 
-  std::vector<Predicate> getPredicateWithVar() const {
+  std::vector<Predicate> getPredicateWithVar(std:vector<Predicate> &toret) const {
     auto it = std::find_if(antecedents.cbegin(), antecedents.cend(),
                            [](const Formula &x) { return x.hasVariables(); });
-    std::vector<Predicate> toret;
     while (it != antecedents.cend()) {
       toret.push_back(it->getPredicate().value());
       it = std::find_if(it, antecedents.cend(),
@@ -602,11 +601,11 @@ public:
     return ret;
   }
 
-  std::vector<Predicate> getConclusionPredicate(const Predicate &in) {
+  std::vector<Predicate> getConclusionPredicate(const Predicate &in,
+                                                std::vector<Predicate> &toret) {
     auto it = std::find_if(
         conclusions.cbegin(), conclusions.cend(),
         [&in](const Conc &x) { return (x.first)->getMatchingPredicate(in); });
-    std::vector<Predicate> toret;
     while (it != conclusions.cend()) {
       toret.push_back(it->first->getPredicate().value());
       it = std::find_if(it, conclusions.cend(), [&in](const Conc &x) {
@@ -619,70 +618,69 @@ public:
   // This can possibly be NP-hard
   bool unify(Implication &out) {
     bool toret = false;
-    while (true) {
-      // Go through every predicate (with a variable) one by one
-      std::vector<Predicate> ps = out.getPredicateWithVar();
-      if (ps.empty())
-        break; // No predicates with variables to unify
 
-      // Here we need to find the substitution for the variable(s)
+    // Go through every predicate (with a variable) one by one
+    std::vector<Predicate> ps;
+    out.getPredicateWithVar(ps);
+    if (ps.empty())
+      return toret; // No predicates with variables to unify
 
-      // 1. Get the predicate with same name and arity from the
-      // conclusions.
-      std::vector<std::vector<Predicate>> concps;
-      concps.reserve(ps.size());
-      for (const auto &x : ps) {
-        auto res = getConclusionPredicate(x);
-        if (res.empty())
-          break; // Some predicate has no known fact
-        else
-          concps.push_back(res);
-      }
-      if (concps.size() != ps.size())
-        break;
+    // Here we need to find the substitution for the variable(s)
 
-      // 2. Make the cartresian product if ps.size() > 1
-      std::vector<std::vector<Predicate>> cartresianconcps;
-      if (ps.size() > 1) {
-        std::vector<std::vector<Predicate>> concprod{concps[0]};
-        cartresianconcps = std::accumulate(
-            concps.cbegin() + 1, concps.cend(), concprod,
-            [](const std::vector<Predicate> &f, const std::vector<Predicate> &s)
-                -> std::vector<std::vector<Predicate>> {
-              std::vector<std::vector<Predicate>> res;
-              for (const Predicate &x : f) {
-                for (const Predicate &y : s) {
-                  res.push_back({y, x});
-                }
+    // 1. Get the predicate with same name and arity from the
+    // conclusions.
+    std::vector<std::vector<Predicate>> concps;
+    concps.reserve(ps.size());
+    for (const auto &x : ps) {
+      std::vector<Predicate> res;
+      getConclusionPredicate(x, res);
+      if (res.empty())
+        break; // Some predicate has no known fact
+      else
+        concps.push_back(res);
+    }
+    if (concps.size() != ps.size())
+      return toret;
+
+    // 2. Make the cartresian product if ps.size() > 1
+    std::vector<std::vector<Predicate>> cartresianconcps;
+    if (ps.size() > 1) {
+      std::vector<std::vector<Predicate>> concprod{concps[0]};
+      cartresianconcps = std::accumulate(
+          concps.cbegin() + 1, concps.cend(), concprod,
+          [](const std::vector<Predicate> &f, const std::vector<Predicate> &s)
+              -> std::vector<std::vector<Predicate>> {
+            std::vector<std::vector<Predicate>> res;
+            for (const Predicate &x : f) {
+              for (const Predicate &y : s) {
+                res.push_back({y, x});
               }
-              return res;
-            });
-      }
-      // 3. Now we have the cartresian product of the conclusion
-      // predicates. Now we can start performing substitution.
-      Implication temp = out;
-      for (const auto &x : cartresianconcps) {
-        assert(x.size() == ps.size()); // This has to hold!
-        for (size_t i = 0; i < ps.size(); ++i) {
-          const Predicate &concp = x[i];
-          const Predicate &implp = ps[i];
-          std::unordered_map<Variable, Atom> subs;
-          if (!getSubstitutes(concp, implp, subs))
-            break;
-          // Now replace all the variables with Atoms in the
-          // Implication.
-          for (const auto &[key, value] : subs)
-            temp = temp.subsVartoAtom(key, value.toString().c_str());
-        }
-        // Now check if antecendets are satisfied
-        if (check_antecedents(temp)) {
-          toret = true;
-          out = temp;
+            }
+            return res;
+          });
+    }
+    // 3. Now we have the cartresian product of the conclusion
+    // predicates. Now we can start performing substitution.
+    Implication temp = out;
+    for (const auto &x : cartresianconcps) {
+      assert(x.size() == ps.size()); // This has to hold!
+      for (size_t i = 0; i < ps.size(); ++i) {
+        const Predicate &concp = x[i];
+        const Predicate &implp = ps[i];
+        std::unordered_map<Variable, Atom> subs;
+        if (!getSubstitutes(concp, implp, subs))
           break;
-        }
+        // Now replace all the variables with Atoms in the
+        // Implication.
+        for (const auto &[key, value] : subs)
+          temp = temp.subsVartoAtom(key, value.toString().c_str());
       }
-      if (toret)
+      // Now check if antecendets are satisfied
+      if (check_antecedents(temp)) {
+        toret = true;
+        out = temp;
         break;
+      }
     }
     return toret;
   }
