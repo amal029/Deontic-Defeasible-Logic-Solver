@@ -426,7 +426,8 @@ public:
       : antecedents(std::move(antecedents)), consequent(std::move(l)) {}
   ~Implication() {}
   Implication(const Implication &) = default;
-  Implication &operator=(const Implication &) = default;
+  Implication &operator=(const Implication &) = delete;
+  Implication &operator=(Implication &&) = default;
   Implication(Implication &&) = default;
   const Formula *getConsequent() const { return &consequent; }
   const Antecedent &getAntecedents() const { return antecedents; }
@@ -597,7 +598,7 @@ public:
       for (auto it = ruletbl->begin(); it != ruletbl->end(); ++it) {
         if (!it->second.getDone() && it->second.hasVariables()) {
           // XXX: We perform unification here
-          Implication out = it->second;
+          Implication out{it->second}; // copy constructor call here
           if (unify(out)) {
             std::get<1>(*it)
                 .setDone(); // setting the original implication as done
@@ -675,7 +676,7 @@ public:
     }
     // 3. Now we have the cartresian product of the conclusion
     // predicates. Now we can start performing substitution.
-    Implication temp = out;
+    Implication temp{out}; // copy ctor
     for (const auto &x : cartresianconcps) {
       assert(x.size() == ps.size()); // This has to hold!
       for (size_t i = 0; i < ps.size(); ++i) {
@@ -687,12 +688,12 @@ public:
         // Now replace all the variables with Atoms in the
         // Implication.
         for (const auto &[key, value] : subs)
-          temp = temp.subsVartoAtom(key, value.toString().c_str());
+          temp = std::move(temp.subsVartoAtom(key, value.toString().c_str()));
       }
       // Now check if antecendets are satisfied
       if (check_antecedents(temp)) {
         toret = true;
-        out = temp;
+        out = std::move(temp);
         break;
       }
     }
