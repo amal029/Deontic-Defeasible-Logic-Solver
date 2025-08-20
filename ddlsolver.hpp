@@ -661,24 +661,27 @@ public:
 
     // 2. Make the cartresian product if ps.size() > 1
     std::vector<std::vector<Predicate>> cartresianconcps;
-    for (const auto &x : concps[0]) {
-      cartresianconcps.push_back({x});
-    }
-    cartresianconcps =
-        std::accumulate(concps.cbegin() + 2, concps.cend(), cartresianconcps,
-                        [](const std::vector<std::vector<Predicate>> &f,
-                           const std::vector<Predicate> &s)
-                            -> std::vector<std::vector<Predicate>> {
-                          std::vector<std::vector<Predicate>> res;
-                          for (const Predicate &y : s) {
-                            for (const std::vector<Predicate> &x : f) {
-                              std::vector<Predicate> res1{std::move(x)};
-                              res1.push_back(std::move(y));
-                              res.push_back(std::move(res1));
+    if (ps.size() > 1) {
+      for (const auto &x : concps[0]) {
+        cartresianconcps.push_back({x});
+      }
+      cartresianconcps =
+          std::accumulate(concps.cbegin() + 1, concps.cend(), cartresianconcps,
+                          [](const std::vector<std::vector<Predicate>> &f,
+                             const std::vector<Predicate> &s)
+                              -> std::vector<std::vector<Predicate>> {
+                            std::vector<std::vector<Predicate>> res;
+                            for (const Predicate &y : s) {
+                              for (const std::vector<Predicate> &x : f) {
+                                std::vector<Predicate> res1{std::move(x)};
+                                res1.push_back(y);
+                                res.push_back(std::move(res1));
+                              }
                             }
-                          }
-                          return res;
-                        });
+                            return res;
+                          });
+    } else
+      cartresianconcps = std::move(concps);
 
     // 3. Now we have the cartresian product of the conclusion
     // predicates. Now we can start performing substitution.
@@ -694,7 +697,7 @@ public:
         // Now replace all the variables with Atoms in the
         // Implication.
         for (const auto &[key, value] : subs)
-          temp = std::move(temp.subsVartoAtom(key, value.toString().c_str()));
+          temp = temp.subsVartoAtom(key, value.toString().c_str());
       }
       // Now check if antecendets are satisfied
       if (check_antecedents(temp)) {
