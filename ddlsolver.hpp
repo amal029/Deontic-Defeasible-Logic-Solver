@@ -10,7 +10,6 @@
 #include <initializer_list>
 #include <iostream>
 #include <numeric>
-#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -21,7 +20,7 @@
 // The literal atom
 class Atom {
 public:
-  Atom(const char* atom) : atom(atom) {}
+  Atom(const char *atom) : atom(atom) {}
   Atom(const Atom &) = default;
   Atom(Atom &&) = default;
   Atom &operator=(const Atom &other) = default;
@@ -159,11 +158,11 @@ public:
       return false;
   }
 
-  std::optional<Predicate> getPredicate() const {
+  Predicate getPredicate() const {
     if (std::holds_alternative<Predicate>(l)) {
       return std::get<Predicate>(l);
     } else
-      return {};
+      assert(false);
   }
 
   bool getMatchingPredicate(const Predicate &x) const {
@@ -178,8 +177,7 @@ public:
       return std::get<Predicate>(l).subsVartoAtom(x, y);
     } else
       return *this;
-    
-  }    
+  }
 
 private:
   LiteralType l;
@@ -217,11 +215,11 @@ public:
       return false;
   }
 
-  std::optional<Predicate> getPredicate() const {
+  Predicate getPredicate() const {
     if (std::holds_alternative<PNot>(pformula)) {
       return std::get<PNot>(pformula).getPredicate();
     } else
-      return {};
+      assert(false);
   }
 
   bool getMatchingPredicate(const Predicate &x) const {
@@ -264,7 +262,7 @@ public:
     return o.subsVartoAtom(x, y);
   }
 
-  std::optional<Predicate> getPredicate() const { return o.getPredicate(); }
+  Predicate getPredicate() const { return o.getPredicate(); }
 
 private:
   OBL o;
@@ -298,17 +296,17 @@ public:
   }
 
   // Get the predicate version of this formula
-  std::optional<Predicate> getPredicate() const {
-    if (std::holds_alternative<Atom>(formula)) {
-      return {};
-    } else if (std::holds_alternative<PNot>(formula)) {
+  Predicate getPredicate() const {
+    if (std::holds_alternative<Predicate>(formula))
+      return std::get<Predicate>(formula);
+    else if (std::holds_alternative<PNot>(formula)) {
       return std::get<PNot>(formula).getPredicate();
     } else if (std::holds_alternative<OBL>(formula)) {
       return std::get<OBL>(formula).getPredicate();
     } else if (std::holds_alternative<DNot>(formula)) {
       return std::get<DNot>(formula).getPredicate();
     } else {
-      return std::get<Predicate>(formula);
+      assert(false);
     }
   }
 
@@ -400,7 +398,7 @@ public:
     } else {
       return std::get<Predicate>(formula).subsVartoAtom(x, y);
     }
-  }    
+  }
 
 private:
   std::variant<Atom, PNot, OBL, DNot, Predicate> formula;
@@ -449,11 +447,12 @@ public:
                            });
   }
 
-  std::vector<Predicate> getPredicateWithVar(std:vector<Predicate> &toret) const {
+  std::vector<Predicate>
+  getPredicateWithVar(std::vector<Predicate> &toret) const {
     auto it = std::find_if(antecedents.cbegin(), antecedents.cend(),
                            [](const Formula &x) { return x.hasVariables(); });
     while (it != antecedents.cend()) {
-      toret.push_back(it->getPredicate().value());
+      toret.push_back(it->getPredicate());
       it = std::find_if(it, antecedents.cend(),
                         [](const Formula &x) { return x.hasVariables(); });
     }
@@ -513,6 +512,21 @@ private:
 using Conc = std::pair<const Formula *, uint64_t>;
 
 enum class HL { HIGHER = 0, LOWER = 1 };
+
+struct VariableHash {
+  std::size_t operator()(const Variable &s) const noexcept {
+    return std::hash<std::string>{}(s.toString());
+  }
+};
+
+// The Formula equality
+struct VariableEq {
+  bool operator()(const Variable &lhs, const Variable &rhs) const {
+    return lhs.toString() == rhs.toString();
+  }
+};
+
+using VarMap = std::unordered_map<Variable, Atom, VariableHash, VariableEq>;
 
 class Solver {
 public:
@@ -607,7 +621,7 @@ public:
         conclusions.cbegin(), conclusions.cend(),
         [&in](const Conc &x) { return (x.first)->getMatchingPredicate(in); });
     while (it != conclusions.cend()) {
-      toret.push_back(it->first->getPredicate().value());
+      toret.push_back(it->first->getPredicate());
       it = std::find_if(it, conclusions.cend(), [&in](const Conc &x) {
         return (x.first)->getMatchingPredicate(in);
       });
@@ -667,7 +681,7 @@ public:
       for (size_t i = 0; i < ps.size(); ++i) {
         const Predicate &concp = x[i];
         const Predicate &implp = ps[i];
-        std::unordered_map<Variable, Atom> subs;
+        VarMap subs;
         if (!getSubstitutes(concp, implp, subs))
           break;
         // Now replace all the variables with Atoms in the
@@ -689,7 +703,7 @@ public:
   // conc predicate Atom. If the impl predicate arg is Atom then
   // it should match the conc predicate arg Atom.
   bool getSubstitutes(const Predicate &concp, const Predicate &implp,
-                      std::unordered_map<Variable, Atom> &subs) {
+                      VarMap &subs) {
     bool toret = true;
     assert(concp.getName() == implp.getName());
     assert(concp.getArity() == implp.getArity());
