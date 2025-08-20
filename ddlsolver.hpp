@@ -464,8 +464,10 @@ public:
     // Go through all the antecedents and replace the variable with the
     // atom
     Antecedent rantecedents{};
-    std::transform(antecedents.cbegin(), antecedents.cend(), rantecedents,
-                   [&v, &atom](const Formula &x) { x.subsVartoAtom(v, atom); });
+    std::for_each(antecedents.cbegin(), antecedents.cend(),
+                  [&v, &atom, &rantecedents](const Formula &x) {
+                    rantecedents.insert(x.subsVartoAtom(v, atom));
+                  });
     Formula rconsequent = consequent.subsVartoAtom(v, atom);
     return Implication(std::move(rantecedents), std::move(rconsequent));
   }
@@ -659,21 +661,25 @@ public:
 
     // 2. Make the cartresian product if ps.size() > 1
     std::vector<std::vector<Predicate>> cartresianconcps;
-    if (ps.size() > 1) {
-      std::vector<std::vector<Predicate>> concprod{concps[0]};
-      cartresianconcps = std::accumulate(
-          concps.cbegin() + 1, concps.cend(), concprod,
-          [](const std::vector<Predicate> &f, const std::vector<Predicate> &s)
-              -> std::vector<std::vector<Predicate>> {
-            std::vector<std::vector<Predicate>> res;
-            for (const Predicate &x : f) {
-              for (const Predicate &y : s) {
-                res.push_back({y, x});
-              }
-            }
-            return res;
-          });
+    for (const auto &x : concps[0]) {
+      cartresianconcps.push_back({x});
     }
+    cartresianconcps =
+        std::accumulate(concps.cbegin() + 2, concps.cend(), cartresianconcps,
+                        [](const std::vector<std::vector<Predicate>> &f,
+                           const std::vector<Predicate> &s)
+                            -> std::vector<std::vector<Predicate>> {
+                          std::vector<std::vector<Predicate>> res;
+                          for (const Predicate &y : s) {
+                            for (const std::vector<Predicate> &x : f) {
+                              std::vector<Predicate> res1{std::move(x)};
+                              res1.push_back(std::move(y));
+                              res.push_back(std::move(res1));
+                            }
+                          }
+                          return res;
+                        });
+
     // 3. Now we have the cartresian product of the conclusion
     // predicates. Now we can start performing substitution.
     Implication temp{out}; // copy ctor

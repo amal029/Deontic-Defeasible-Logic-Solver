@@ -56,7 +56,7 @@ int main() {
   Formula ra1c = ra1;
   std::cout << ra1c.toString() << " " << ra1.toString() << "\n";
   // Substitute the proposition with another proposition
-  Formula ra2c{ra1c.substituteProp("Z")};
+  Formula ra2c{ra1c.substituteProp(A, "Z")};
   std::cout << ra2c.toString() << " " << ra1c.toString() << " "
             << ra1.toString() << "\n";
   return 0;
