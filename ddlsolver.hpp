@@ -163,19 +163,17 @@ public:
     } else
       return PNot(std::get<Predicate>(l).substituteProp(x, y));
   }
-  
+
   bool hasVariable(const Variable &tocheck) const {
-    if (std::holds_alternative<Predicate>(l)) {
-      return std::get<Predicate>(l).hasVariable(tocheck);
-    } else
-      return false;
+    return (std::holds_alternative<Predicate>(l))
+               ? std::get<Predicate>(l).hasVariable(tocheck)
+               : false;
   }
 
   bool hasVariables() const {
-    if (std::holds_alternative<Predicate>(l)) {
-      return std::get<Predicate>(l).hasVariables();
-    } else
-      return false;
+    return (std::holds_alternative<Predicate>(l))
+               ? std::get<Predicate>(l).hasVariables()
+               : false;
   }
 
   Predicate getPredicate() const {
@@ -186,17 +184,15 @@ public:
   }
 
   bool getMatchingPredicate(const Predicate &x) const {
-    if (std::holds_alternative<Predicate>(l)) {
-      return std::get<Predicate>(l).getMatchingPredicate(x);
-    } else
-      return false;
+    return (std::holds_alternative<Predicate>(l))
+               ? std::get<Predicate>(l).getMatchingPredicate(x)
+               : false;
   }
 
   PNot subsVartoAtom(const Variable &x, const char *y) const {
-    if (std::holds_alternative<Predicate>(l)) {
-      return std::get<Predicate>(l).subsVartoAtom(x, y);
-    } else
-      return *this;
+    return (std::holds_alternative<Predicate>(l))
+               ? std::get<Predicate>(l).subsVartoAtom(x, y)
+               : *this;
   }
 
 private:
@@ -221,25 +217,21 @@ public:
   }
 
   OBL substituteProp(const Atom &x, const char *&y) const {
-    if (std::holds_alternative<Atom>(pformula)) {
-      return OBL(std::get<Atom>(pformula).substituteProp(x, y));
-    } else {
-      return OBL(std::get<PNot>(pformula).substituteProp(x, y));
-    }
+    return (std::holds_alternative<Atom>(pformula))
+               ? OBL(std::get<Atom>(pformula).substituteProp(x, y))
+               : OBL(std::get<PNot>(pformula).substituteProp(x, y));
   }
 
   bool hasVariable(const Variable &tocheck) const {
-    if (std::holds_alternative<PNot>(pformula)) {
-      return std::get<PNot>(pformula).hasVariable(tocheck);
-    } else
-      return false;
+    return (std::holds_alternative<PNot>(pformula))
+               ? std::get<PNot>(pformula).hasVariable(tocheck)
+               : false;
   }
 
   bool hasVariables() const {
-    if (std::holds_alternative<PNot>(pformula)) {
-      return std::get<PNot>(pformula).hasVariables();
-    } else
-      return false;
+    return (std::holds_alternative<PNot>(pformula))
+               ? std::get<PNot>(pformula).hasVariables()
+               : false;
   }
 
   Predicate getPredicate() const {
@@ -250,17 +242,15 @@ public:
   }
 
   bool getMatchingPredicate(const Predicate &x) const {
-    if (std::holds_alternative<PNot>(pformula)) {
-      return std::get<PNot>(pformula).getMatchingPredicate(x);
-    } else
-      return false;
+    return (std::holds_alternative<PNot>(pformula))
+               ? std::get<PNot>(pformula).getMatchingPredicate(x)
+               : false;
   }
 
   OBL subsVartoAtom(const Variable &x, const char *y) const {
-    if (std::holds_alternative<PNot>(pformula)) {
-      return std::get<PNot>(pformula).subsVartoAtom(x, y);
-    } else
-      return *this;
+    return (std::holds_alternative<PNot>(pformula))
+               ? std::get<PNot>(pformula).subsVartoAtom(x, y)
+               : *this;
   }
 
 private:
@@ -491,7 +481,7 @@ public:
                              return val || x.hasVariables();
                            });
   }
-  
+
   bool hasVariable(const Variable &tocheck) const {
     return std::accumulate(antecedents.cbegin(), antecedents.cend(), false,
                            [&tocheck](const bool &val, const Formula &x) {
@@ -674,7 +664,8 @@ public:
             std::cout << "Adding the consequent: "
                       << it->second.getConsequent()->toString() << "\n";
 #endif
-            processing.push_back({it->second.getConsequent(), std::get<0>(*it)});
+            processing.push_back(
+                {it->second.getConsequent(), std::get<0>(*it)});
           }
         }
         // Now check if all antecedents are satisfied.
@@ -741,7 +732,7 @@ public:
       std::cout << "]\n";
     });
 #endif
-    
+
     if (concps.size() != ps.size())
       return toret;
 
@@ -770,17 +761,19 @@ public:
       cartresianconcps = std::move(concps);
 #ifdef DEBUG
     std::cout << "Predicates in cartresian: \n";
-    for_each(cartresianconcps.begin(), cartresianconcps.end(), [](const auto &x) {
-      std::cout << "[";
-      for_each(x.begin(), x.end(),
-               [](const Predicate &y) { std::cout << y.toString() << " "; });
-      std::cout << "]\n";
-    });
+    for_each(cartresianconcps.begin(), cartresianconcps.end(),
+             [](const auto &x) {
+               std::cout << "[";
+               for_each(x.begin(), x.end(), [](const Predicate &y) {
+                 std::cout << y.toString() << " ";
+               });
+               std::cout << "]\n";
+             });
 #endif
     // 3. Now we have the cartresian product of the conclusion
     // predicates. Now we can start performing substitution.
     for (const auto &x : cartresianconcps) {
-      Implication temp{out}; // copy ctor
+      Implication temp{out};         // copy ctor
       assert(x.size() == ps.size()); // This has to hold!
       for (size_t i = 0; i < ps.size(); ++i) {
         const Predicate &concp = x[i];
@@ -800,20 +793,18 @@ public:
 #endif
         // Now replace all the variables with Atoms in the
         // Implication.
-        for (const auto &[key, value] : subs) {
-          if (!temp.hasVariable(key))
-            break;
-          temp = temp.subsVartoAtom(key, value.toString().c_str());
-        }
+        for (const auto &[key, value] : subs)
+          if (temp.hasVariable(key))
+            temp = temp.subsVartoAtom(key, value.toString().c_str());
       }
 #ifdef DEBUG
       std::cout << "after replacement implication: " << temp.toString() << "\n";
-#endif      
+#endif
       // Now check if antecendets are satisfied
       if (check_antecedents(temp)) {
 #ifdef DEBUG
-        std::cout << "Antecedents done!\n";
-#endif        
+        std::cout << "Antecedents met! Triggering the consequent\n";
+#endif
         toret = true;
         out = std::move(temp);
         break;
