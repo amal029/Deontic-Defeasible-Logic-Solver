@@ -99,19 +99,16 @@ public:
         });
   }
 
-  Predicate subsVartoAtom(const Variable &x, const char *y) const {
-    std::vector<PredicateType> argsc{args};
-    for (size_t counter = 0; counter < argsc.size(); ++counter) {
-      if (std::holds_alternative<Variable>(argsc[counter]) &&
-          std::get<Variable>(argsc[counter]).getName() == x.getName()) {
-        argsc[counter] = Atom(y);
+  void subsVartoAtom(const Variable &x, const char *y) {
+    for (size_t counter = 0; counter < args.size(); ++counter) {
+      if (std::holds_alternative<Variable>(args[counter]) &&
+          std::get<Variable>(args[counter]).getName() == x.getName()) {
+        args[counter] = Atom(y);
       }
     }
-    Predicate toret{name, std::move(argsc)};
 #ifdef DEBUG
-    std::cout << "return predicate " << toret.toString() << "\n";
+    std::cout << "return predicate " << this->toString() << "\n";
 #endif
-    return toret;
   }
 
   Predicate substituteProp(const Atom &x, const char *y) const {
@@ -189,10 +186,10 @@ public:
                : false;
   }
 
-  PNot subsVartoAtom(const Variable &x, const char *y) const {
-    return (std::holds_alternative<Predicate>(l))
-               ? std::get<Predicate>(l).subsVartoAtom(x, y)
-               : *this;
+  void subsVartoAtom(const Variable &x, const char *y) {
+    if (std::holds_alternative<Predicate>(l)) {
+      std::get<Predicate>(l).subsVartoAtom(x, y);
+    }
   }
 
 private:
@@ -247,10 +244,10 @@ public:
                : false;
   }
 
-  OBL subsVartoAtom(const Variable &x, const char *y) const {
-    return (std::holds_alternative<PNot>(pformula))
-               ? std::get<PNot>(pformula).subsVartoAtom(x, y)
-               : *this;
+  void subsVartoAtom(const Variable &x, const char *y) {
+    if (std::holds_alternative<PNot>(pformula)) {
+      std::get<PNot>(pformula).subsVartoAtom(x, y);
+    }
   }
 
 private:
@@ -278,8 +275,8 @@ public:
   bool getMatchingPredicate(const Predicate &x) const {
     return o.getMatchingPredicate(x);
   }
-  OBL subsVartoAtom(const Variable &x, const char *y) const {
-    return o.subsVartoAtom(x, y);
+  void subsVartoAtom(const Variable &x, const char *y) {
+    o.subsVartoAtom(x, y);
   }
 
   Predicate getPredicate() const { return o.getPredicate(); }
@@ -420,17 +417,15 @@ public:
     }
   }
 
-  Formula subsVartoAtom(const Variable &x, const char *y) const {
-    if (std::holds_alternative<Atom>(formula)) {
-      return *this;
-    } else if (std::holds_alternative<PNot>(formula)) {
-      return std::get<PNot>(formula).subsVartoAtom(x, y);
+  void subsVartoAtom(const Variable &x, const char *y) {
+    if (std::holds_alternative<PNot>(formula)) {
+      std::get<PNot>(formula).subsVartoAtom(x, y);
     } else if (std::holds_alternative<OBL>(formula)) {
-      return std::get<OBL>(formula).subsVartoAtom(x, y);
+      std::get<OBL>(formula).subsVartoAtom(x, y);
     } else if (std::holds_alternative<DNot>(formula)) {
-      return std::get<DNot>(formula).subsVartoAtom(x, y);
+      std::get<DNot>(formula).subsVartoAtom(x, y);
     } else {
-      return std::get<Predicate>(formula).subsVartoAtom(x, y);
+      std::get<Predicate>(formula).subsVartoAtom(x, y);
     }
   }
 
@@ -502,25 +497,22 @@ public:
 #endif
   }
 
-  Implication subsVartoAtom(const Variable &v, const char *atom) const {
+  void subsVartoAtom(const Variable &v, const char *atom) {
     // Go through all the antecedents and replace the variable with the
     // atom
-    Antecedent rantecedents{};
-    std::for_each(antecedents.cbegin(), antecedents.cend(),
-                  [&v, &atom, &rantecedents](const Formula &x) {
-                    if (x.hasVariable(v))
-                      rantecedents.insert(x.subsVartoAtom(v, atom));
-                    else
-                      rantecedents.insert(x);
-                  });
-    Formula rconsequent = consequent.hasVariable(v)
-                              ? consequent.subsVartoAtom(v, atom)
-                              : consequent;
-    Implication toret{std::move(rantecedents), std::move(rconsequent)};
+    for (auto it = antecedents.begin(); it != antecedents.end(); ++it) {
+      if (it->hasVariable(v)) {
+        Formula f{*it};
+        f.subsVartoAtom(v, atom);
+        antecedents.erase(it);
+        antecedents.emplace(f);
+      }
+    }
+    if (consequent.hasVariable(v))
+      consequent.subsVartoAtom(v, atom);
 #ifdef DEBUG
-    std::cout << "conclusion implication: " << toret.toString() << "\n";
+    std::cout << "conclusion implication: " << this->toString() << "\n";
 #endif
-    return toret;
   }
 
 private:
@@ -795,7 +787,7 @@ public:
         // Implication.
         for (const auto &[key, value] : subs)
           if (temp.hasVariable(key))
-            temp = temp.subsVartoAtom(key, value.toString().c_str());
+            temp.subsVartoAtom(key, value.toString().c_str());
       }
 #ifdef DEBUG
       std::cout << "after replacement implication: " << temp.toString() << "\n";
