@@ -100,17 +100,13 @@ public:
   }
 
   Predicate subsVartoAtom(const Variable &x, const char *y) const {
-    std::vector<PredicateType> argsc;
-    std::for_each(args.cbegin(), args.cend(),
-                  [&x, &y, &argsc](const PredicateType &z) {
-                    if (std::holds_alternative<Variable>(z)) {
-                      if (std::get<Variable>(z).getName() == x.getName()) {
-                        argsc.push_back(Atom(y));
-                      } else
-                        argsc.push_back(z);
-                    } else
-                      return argsc.push_back(z);
-                  });
+    std::vector<PredicateType> argsc{args};
+    for (size_t counter = 0; counter < argsc.size(); ++counter) {
+      if (std::holds_alternative<Variable>(argsc[counter]) &&
+          std::get<Variable>(argsc[counter]).getName() == x.getName()) {
+        argsc[counter] = Atom(y);
+      }
+    }
     Predicate toret{name, std::move(argsc)};
 #ifdef DEBUG
     std::cout << "return predicate " << toret.toString() << "\n";
@@ -522,9 +518,14 @@ public:
     Antecedent rantecedents{};
     std::for_each(antecedents.cbegin(), antecedents.cend(),
                   [&v, &atom, &rantecedents](const Formula &x) {
-                    rantecedents.insert(x.subsVartoAtom(v, atom));
+                    if (x.hasVariable(v))
+                      rantecedents.insert(x.subsVartoAtom(v, atom));
+                    else
+                      rantecedents.insert(x);
                   });
-    Formula rconsequent = consequent.subsVartoAtom(v, atom);
+    Formula rconsequent = consequent.hasVariable(v)
+                              ? consequent.subsVartoAtom(v, atom)
+                              : consequent;
     Implication toret{std::move(rantecedents), std::move(rconsequent)};
 #ifdef DEBUG
     std::cout << "conclusion implication: " << toret.toString() << "\n";
