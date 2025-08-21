@@ -9,6 +9,7 @@
 #include <functional>
 #include <initializer_list>
 #include <iostream>
+#include <iterator>
 #include <numeric>
 #include <string>
 #include <unordered_map>
@@ -86,20 +87,35 @@ public:
                            });
   }
 
+  bool hasVariable(const Variable &tocheck) const {
+    // accumulate the args inside this to check if there are any vars in
+    // here!
+    return std::accumulate(
+        args.cbegin(), args.cend(), false,
+        [&tocheck](const bool &y, const PredicateType &x) {
+          return ((std::holds_alternative<Variable>(x)) &&
+                  (std::get<Variable>(x).getName() == tocheck.getName())) ||
+                 y;
+        });
+  }
+
   Predicate subsVartoAtom(const Variable &x, const char *y) const {
     std::vector<PredicateType> argsc;
-    argsc.reserve(args.size());
-    std::transform(args.cbegin(), args.cend(), argsc.begin(),
-                   [&x, &y](const PredicateType &z) -> PredicateType {
-                     if (std::holds_alternative<Variable>(z)) {
-                       if (std::get<Variable>(z).getName() == x.getName()) {
-                         return Atom(y);
-                       } else
-                         return z;
-                     } else
-                       return z;
-                   });
-    return Predicate{name, std::move(argsc)};
+    std::for_each(args.cbegin(), args.cend(),
+                  [&x, &y, &argsc](const PredicateType &z) {
+                    if (std::holds_alternative<Variable>(z)) {
+                      if (std::get<Variable>(z).getName() == x.getName()) {
+                        argsc.push_back(Atom(y));
+                      } else
+                        argsc.push_back(z);
+                    } else
+                      return argsc.push_back(z);
+                  });
+    Predicate toret{name, std::move(argsc)};
+#ifdef DEBUG
+    std::cout << "return predicate " << toret.toString() << "\n";
+#endif
+    return toret;
   }
 
   Predicate substituteProp(const Atom &x, const char *y) const {
@@ -151,6 +167,14 @@ public:
     } else
       return PNot(std::get<Predicate>(l).substituteProp(x, y));
   }
+  
+  bool hasVariable(const Variable &tocheck) const {
+    if (std::holds_alternative<Predicate>(l)) {
+      return std::get<Predicate>(l).hasVariable(tocheck);
+    } else
+      return false;
+  }
+
   bool hasVariables() const {
     if (std::holds_alternative<Predicate>(l)) {
       return std::get<Predicate>(l).hasVariables();
@@ -208,6 +232,13 @@ public:
     }
   }
 
+  bool hasVariable(const Variable &tocheck) const {
+    if (std::holds_alternative<PNot>(pformula)) {
+      return std::get<PNot>(pformula).hasVariable(tocheck);
+    } else
+      return false;
+  }
+
   bool hasVariables() const {
     if (std::holds_alternative<PNot>(pformula)) {
       return std::get<PNot>(pformula).hasVariables();
@@ -255,6 +286,9 @@ public:
   }
 
   bool hasVariables() const { return o.hasVariables(); }
+  bool hasVariable(const Variable &tocheck) const {
+    return o.hasVariable(tocheck);
+  }
   bool getMatchingPredicate(const Predicate &x) const {
     return o.getMatchingPredicate(x);
   }
@@ -358,6 +392,20 @@ public:
     return "";
   }
 
+  bool hasVariable(const Variable &tocheck) const {
+    if (std::holds_alternative<Atom>(formula)) {
+      return false;
+    } else if (std::holds_alternative<PNot>(formula)) {
+      return std::get<PNot>(formula).hasVariable(tocheck);
+    } else if (std::holds_alternative<OBL>(formula)) {
+      return std::get<OBL>(formula).hasVariable(tocheck);
+    } else if (std::holds_alternative<DNot>(formula)) {
+      return std::get<DNot>(formula).hasVariable(tocheck);
+    } else {
+      return std::get<Predicate>(formula).hasVariable(tocheck);
+    }
+  }
+
   bool hasVariables() const {
     if (std::holds_alternative<Atom>(formula)) {
       return false;
@@ -447,17 +495,25 @@ public:
                              return val || x.hasVariables();
                            });
   }
+  
+  bool hasVariable(const Variable &tocheck) const {
+    return std::accumulate(antecedents.cbegin(), antecedents.cend(), false,
+                           [&tocheck](const bool &val, const Formula &x) {
+                             return val || x.hasVariable(tocheck);
+                           });
+  }
 
-  std::vector<Predicate>
-  getPredicateWithVar(std::vector<Predicate> &toret) const {
-    auto it = std::find_if(antecedents.cbegin(), antecedents.cend(),
+  void getPredicateWithVar(std::vector<Predicate> &toret) const {
+    auto it = std::find_if(antecedents.begin(), antecedents.end(),
                            [](const Formula &x) { return x.hasVariables(); });
-    while (it != antecedents.cend()) {
+    while (it != antecedents.end()) {
       toret.push_back(it->getPredicate());
-      it = std::find_if(it, antecedents.cend(),
+      it = std::find_if(std::next(it), antecedents.end(),
                         [](const Formula &x) { return x.hasVariables(); });
     }
-    return toret;
+#ifdef DEBUG
+    std::cout << "Got the predicates with vars in implication\n";
+#endif
   }
 
   Implication subsVartoAtom(const Variable &v, const char *atom) const {
@@ -469,7 +525,11 @@ public:
                     rantecedents.insert(x.subsVartoAtom(v, atom));
                   });
     Formula rconsequent = consequent.subsVartoAtom(v, atom);
-    return Implication(std::move(rantecedents), std::move(rconsequent));
+    Implication toret{std::move(rantecedents), std::move(rconsequent)};
+#ifdef DEBUG
+    std::cout << "conclusion implication: " << toret.toString() << "\n";
+#endif
+    return toret;
   }
 
 private:
@@ -549,9 +609,11 @@ public:
 #endif
     // 2. Now loop until the queue is done
     while (!processing.empty()) {
+#ifdef DEBUG
+      std::cout << "temp : " << this->toString() << "\n";
+#endif
       Conc &temp = processing.front();
       processing.pop_front(); // remove the rule from processing.
-
       // Check if this rule has a higher precedence rule in the
       // conclusions already
       auto iter = check_precedence(std::get<1>(temp), HL::HIGHER);
@@ -600,11 +662,18 @@ public:
       for (auto it = ruletbl->begin(); it != ruletbl->end(); ++it) {
         if (!it->second.getDone() && it->second.hasVariables()) {
           // XXX: We perform unification here
-          Implication out{it->second}; // copy constructor call here
-          if (unify(out)) {
+          // Implication out{it->second}; // copy constructor call here
+#ifdef DEBUG
+          std::cout << "entering unify\n";
+#endif
+          if (unify(it->second)) {
             std::get<1>(*it)
                 .setDone(); // setting the original implication as done
-            processing.push_back({out.getConsequent(), std::get<0>(*it)});
+#ifdef DEBUG
+            std::cout << "Adding the consequent: "
+                      << it->second.getConsequent()->toString() << "\n";
+#endif
+            processing.push_back({it->second.getConsequent(), std::get<0>(*it)});
           }
         }
         // Now check if all antecedents are satisfied.
@@ -625,9 +694,10 @@ public:
         [&in](const Conc &x) { return (x.first)->getMatchingPredicate(in); });
     while (it != conclusions.cend()) {
       toret.push_back(it->first->getPredicate());
-      it = std::find_if(it, conclusions.cend(), [&in](const Conc &x) {
-        return (x.first)->getMatchingPredicate(in);
-      });
+      it =
+          std::find_if(std::next(it), conclusions.cend(), [&in](const Conc &x) {
+            return (x.first)->getMatchingPredicate(in);
+          });
     }
     return toret;
   }
@@ -639,6 +709,11 @@ public:
     // Go through every predicate (with a variable) one by one
     std::vector<Predicate> ps;
     out.getPredicateWithVar(ps);
+#ifdef DEBUG
+    std::cout << "Predicates with Var in implication: \n";
+    for_each(ps.begin(), ps.end(),
+             [](const Predicate &x) { std::cout << x.toString() << "\n"; });
+#endif
     if (ps.empty())
       return toret; // No predicates with variables to unify
 
@@ -656,6 +731,16 @@ public:
       else
         concps.push_back(res);
     }
+#ifdef DEBUG
+    std::cout << "Predicates in conclusions: \n";
+    for_each(concps.begin(), concps.end(), [](const auto &x) {
+      std::cout << "[";
+      for_each(x.begin(), x.end(),
+               [](const Predicate &y) { std::cout << y.toString() << " "; });
+      std::cout << "]\n";
+    });
+#endif
+    
     if (concps.size() != ps.size())
       return toret;
 
@@ -682,25 +767,52 @@ public:
                           });
     } else
       cartresianconcps = std::move(concps);
-
+#ifdef DEBUG
+    std::cout << "Predicates in cartresian: \n";
+    for_each(cartresianconcps.begin(), cartresianconcps.end(), [](const auto &x) {
+      std::cout << "[";
+      for_each(x.begin(), x.end(),
+               [](const Predicate &y) { std::cout << y.toString() << " "; });
+      std::cout << "]\n";
+    });
+#endif
     // 3. Now we have the cartresian product of the conclusion
     // predicates. Now we can start performing substitution.
-    Implication temp{out}; // copy ctor
     for (const auto &x : cartresianconcps) {
+      Implication temp{out}; // copy ctor
       assert(x.size() == ps.size()); // This has to hold!
       for (size_t i = 0; i < ps.size(); ++i) {
         const Predicate &concp = x[i];
         const Predicate &implp = ps[i];
+#ifdef DEBUG
+        std::cout << "comparing: impl predicate: " << implp.toString()
+                  << " conc predicate :" << concp.toString() << "\n";
+#endif
         VarMap subs;
         if (!getSubstitutes(concp, implp, subs))
           break;
+#ifdef DEBUG
+        for (const auto &[k, v] : subs) {
+          std::cout << "key: " << k.toString() << " value: " << v.toString()
+                    << "\n";
+        }
+#endif
         // Now replace all the variables with Atoms in the
         // Implication.
-        for (const auto &[key, value] : subs)
+        for (const auto &[key, value] : subs) {
+          if (!temp.hasVariable(key))
+            break;
           temp = temp.subsVartoAtom(key, value.toString().c_str());
+        }
       }
+#ifdef DEBUG
+      std::cout << "after replacement implication: " << temp.toString() << "\n";
+#endif      
       // Now check if antecendets are satisfied
       if (check_antecedents(temp)) {
+#ifdef DEBUG
+        std::cout << "Antecedents done!\n";
+#endif        
         toret = true;
         out = std::move(temp);
         break;
