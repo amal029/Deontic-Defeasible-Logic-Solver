@@ -26,7 +26,7 @@
   B$ and $r2: C \implies \neg B$. Moreover, also consider that both
   propositions $A$ and $B$ are facts given as input to your inference
   engine. Then, _classical_ propositional logic inference engine will
-  given an output of __unsatisfied__.
+  give an output of _unsatisfied_.
   
   Defeasible logic gives precedence to logical rules in the KB. If $r1 >
   r2$, then $r1$ _defeats_ rule $r2$ to produce an output that
