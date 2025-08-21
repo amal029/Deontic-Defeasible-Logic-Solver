@@ -1,8 +1,8 @@
   * This is a solver for Deontic Defeasible Logic programs.
 	1. The solver is written in C++ (std C++-17).
-	2. The solver can be compiled using: ``g++-m -O3 -Werror -Wall
+	2. The solver can be compiled using: ``g++ -O3 -Werror -Wall
 	-Wpedantic -std=c++17 main.cpp -o solver && ./solver``
-	3. Or using: ``g++-m -O3 -Werror -Wall -Wpedantic -std=c++17
+	3. Or using: ``g++ -O3 -Werror -Wall -Wpedantic -std=c++17
 	mainfol.cpp -o solver && ./solver``
     4. The example is written in the main function.
 	
@@ -22,11 +22,11 @@
 	
 * What is Defeasible logic
 
-  Consider that your knowledge base (KB) has a two rules: $r1: A
-  \implies B$ and $r2: C \implies \neg B$. Moreover, also consider that
-  both propositions $A$ and $B$ are facts given as input to your
-  inference engine. Then, _classical_ propositional logic inference
-  engine will given an output of __unsatisfied__.
+  Consider that your knowledge base (KB) has two rules: $r1: A \implies
+  B$ and $r2: C \implies \neg B$. Moreover, also consider that both
+  propositions $A$ and $B$ are facts given as input to your inference
+  engine. Then, _classical_ propositional logic inference engine will
+  given an output of __unsatisfied__.
   
   Defeasible logic gives precedence to logical rules in the KB. If $r1 >
   r2$, then $r1$ _defeats_ rule $r2$ to produce an output that
