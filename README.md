@@ -39,7 +39,7 @@
   Deontic Defeasible logic via AI for runtime verification and
   compliance. This tool forms the part of the tool suite.
   
-* Supported logic:
+* Supported fragments of logic:
   1. Defeasible logic.
   2. Deontic Obligation operator.
   3. Predicates and propositions.
@@ -52,14 +52,14 @@
      in each KB rule.
   2. Backtracking for solving defeasible logic.
   3. See two example files: ``main.cpp`` and ``mainfol.cpp`` for
-     propositional defeasible deontic logic and first order defeasible
-     deontic logic examples, respectively.
+     propositional deontic defeasible logic and first order deontic
+     defeasible logic examples, respectively.
 	 
 * Research questions:
   1. What is an efficient algorithm to prove equivalence of two
-     (possibly syntactically different) defeasible deontic logic
+     (possibly syntactically different) deontic defeasible logic
      formulae?
   2. What is an efficient runtime verification and enforcement strategy
-     for defeasible deontic logic formulae on a given model?
+     for deontic defeasible logic formulae on a given model?
   3. How can one capture ethical rules and cultural rules described in
-     Natural language into __temporal defeasible deontic logic__?
+     Natural language into __temporal deontic defeasible logic__?
