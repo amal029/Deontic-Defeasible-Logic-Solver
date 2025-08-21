@@ -15,7 +15,7 @@
     $L : (W) \rightarrow p, p \in Prop$, where $Prop$ are a set of
     propositions.
 	
-	Then, $M, w |= O(p), if \forall w', such that R(w, w'), M, w |= p$.
+	Then, $M, w |= O(p), if\ \forall w', s.t.\  R(w, w'), M, w |= p$.
 	
 	We can also define, permission $P(p) = \neg O(\neg p)$ and Forbidden
     as $F(p) = \neg O(p)$.
