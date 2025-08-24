@@ -24,7 +24,7 @@
 
   Consider that your knowledge base (KB) has two rules: $r1: A \implies
   B$ and $r2: C \implies \neg B$. Moreover, also consider that both
-  propositions $A$ and $B$ are facts given as input to your inference
+  propositions $A$ and $C$ are facts given as input to your inference
   engine. Then, _classical_ propositional logic inference engine will
   give an output of _unsatisfied_.
   
