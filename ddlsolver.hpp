@@ -23,7 +23,7 @@ class Atom {
 public:
   Atom(const char *atom) : atom(atom) {}
   Atom(const Atom &) = default;
-  Atom(Atom &&) = default;
+  Atom(Atom &&) noexcept = default;
   Atom &operator=(const Atom &other) = default;
   Atom &operator=(Atom &&other) = default;
   ~Atom() {}
@@ -56,10 +56,10 @@ private:
 using PredicateType = std::variant<Variable, Atom>;
 class Predicate {
 public:
-  Predicate(std::string &&name, std::initializer_list<PredicateType> &&args)
-      : args(std::move(args)), name(std::move(name)) {}
+  Predicate(std::string &&name, std::initializer_list<PredicateType> &&args) noexcept
+    : args(std::move(args)), name(std::move(name)) {}
   Predicate(std::string name, std::vector<PredicateType> &&args)
-      : args(std::move(args)), name(std::move(name)) {}
+    : args(std::move(args)), name(std::move(name)) {}
 
   ~Predicate() {}
   std::string toString() const {
@@ -91,12 +91,12 @@ public:
     // accumulate the args inside this to check if there are any vars in
     // here!
     return std::accumulate(
-        args.cbegin(), args.cend(), false,
-        [&tocheck](const bool &y, const PredicateType &x) {
-          return ((std::holds_alternative<Variable>(x)) &&
-                  (std::get<Variable>(x).getName() == tocheck.getName())) ||
-                 y;
-        });
+			   args.cbegin(), args.cend(), false,
+			   [&tocheck](const bool &y, const PredicateType &x) {
+			     return ((std::holds_alternative<Variable>(x)) &&
+				     (std::get<Variable>(x).getName() == tocheck.getName())) ||
+			       y;
+			   });
   }
 
   Predicate subsVartoAtom(const Variable &x, const char *y) const {
@@ -128,7 +128,7 @@ public:
   }
 
   const std::string &getName() const { return name; }
-  const size_t getArity() const { return args.size(); }
+  size_t getArity() const { return args.size(); }
 
   bool getMatchingPredicate(const Predicate &x) const {
     return (x.getName() == name) && (x.getArity() == getArity());
@@ -147,8 +147,8 @@ public:
   PNot(Atom lit) : l(lit) {}
   PNot(Predicate lit) : l(lit) {}
   PNot(const PNot &) = default;
-  PNot &operator=(const PNot &) = default;
-  PNot(PNot &&) = default;
+  PNot &operator=(const PNot &) noexcept = default;
+  PNot(PNot &&) noexcept = default;
   ~PNot() {}
   std::string toString() const {
     if (std::holds_alternative<Atom>(l)) {
@@ -204,7 +204,7 @@ class OBL {
 public:
   OBL(Atom l) : pformula(l) {};
   OBL(PNot n) : pformula(n) {};
-  OBL(const OBL &) = default;
+  OBL(const OBL &) noexcept = default;
   OBL &operator=(const OBL &) = default;
   OBL(OBL &&) = default;
   ~OBL() {}
@@ -265,8 +265,8 @@ class DNot {
 public:
   DNot(OBL o) : o(o) {}
   DNot(const DNot &) = default;
-  DNot &operator=(const DNot &) = default;
-  DNot(DNot &&) = default;
+  DNot &operator=(const DNot &) noexcept = default;
+  DNot(DNot &&) noexcept = default;
   ~DNot() {}
   std::string toString() const { return "(Not " + o.toString() + ")"; }
   const OBL &getOBL() const { return o; }
@@ -300,8 +300,8 @@ public:
   Formula(OBL l) : formula(std::move(l)) {}
   Formula(DNot l) : formula(std::move(l)) {}
   Formula(const Formula &) = default;
-  Formula &operator=(const Formula &) = default;
-  Formula(Formula &&) = default;
+  Formula &operator=(const Formula &) noexcept = default;
+  Formula(Formula &&) noexcept = default;
   ~Formula() {}
   std::string toString() const {
     std::string ss;
@@ -464,12 +464,12 @@ public:
       : antecedents(std::move(antecedents)), consequent(std::move(l)) {}
   ~Implication() {}
   Implication(const Implication &) = default;
-  Implication &operator=(const Implication &) = delete;
-  Implication &operator=(Implication &&) = default;
-  Implication(Implication &&) = default;
+  Implication &operator=(const Implication &) noexcept = delete;
+  Implication &operator=(Implication &&) noexcept = default;
+  Implication(Implication &&) noexcept = default;
   const Formula *getConsequent() const { return &consequent; }
   const Antecedent &getAntecedents() const { return antecedents; }
-  const bool getDone() const { return done; }
+  bool getDone() const { return done; }
   void setDone(bool val = true) { done = val; }
   std::string toString() const {
     std::string toret = "{";
@@ -753,7 +753,7 @@ public:
                             std::vector<std::vector<Predicate>> res;
                             for (const Predicate &y : s) {
                               for (const std::vector<Predicate> &x : f) {
-                                std::vector<Predicate> res1{std::move(x)};
+                                std::vector<Predicate> res1{x};
                                 res1.push_back(y);
                                 res.push_back(std::move(res1));
                               }
