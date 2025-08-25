@@ -12,6 +12,7 @@
 #include <iterator>
 #include <numeric>
 #include <string>
+#include <sys/types.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -359,6 +360,19 @@ public:
     return std::holds_alternative<Predicate>(formula);
   }
   bool isOBL() const { return std::holds_alternative<OBL>(formula); }
+
+  Formula getComplementFormula() const {
+    if (this->isAtom()) {
+      return PNot(std::get<Atom>(formula));
+    } else if (this->isOBL()) {
+      return DNot(std::get<OBL>(formula));
+    } else if (this->isPredicate()) {
+      return PNot(std::get<Predicate>(formula));
+    }
+    else
+      assert(false);
+  }
+
   std::string getComplement() const {
     if (this->isAtom()) {
       return PNot(std::get<Atom>(formula)).toString();
@@ -369,6 +383,20 @@ public:
     }
     return "";
   }
+
+  Formula getComplementInnerFormula() const {
+    if (std::holds_alternative<PNot>(formula)) {
+      auto x = std::get<PNot>(formula).getLiteral();
+      if (std::holds_alternative<Atom>(x)) {
+        return std::get<Atom>(x);
+      } else
+        return std::get<Predicate>(x);
+    } else if (std::holds_alternative<DNot>(formula)) {
+      return std::get<DNot>(formula).getOBL();
+    } else
+      assert(false);
+  }
+
   std::string getComplementInner() const {
     if (std::holds_alternative<PNot>(formula)) {
       auto x = std::get<PNot>(formula).getLiteral();
@@ -550,6 +578,7 @@ public:
     rules.insert({rnum, std::move(rule)});
   }
   size_t size() const { return rules.size(); }
+  const Implication &find(uint64_t key) { return rules.find(key)->second; }
   auto begin() { return rules.begin(); }
   auto end() { return rules.end(); }
   std::string toString() {
@@ -584,6 +613,19 @@ struct VariableEq {
 };
 
 using VarMap = std::unordered_map<Variable, Atom, VariableHash, VariableEq>;
+
+// Backward chaining for getting the facts (propositions and predicates)
+// that are needed to satisfy the given goal.
+struct Node {
+  std::vector<size_t> edges;
+  const Formula *f;
+  bool fact;
+  bool tofree = false;
+  ~Node() {
+    if (tofree)
+      delete f;
+  }
+};
 
 class Solver {
 public:
@@ -1023,10 +1065,142 @@ private:
       return res; // we have found a higher one
     }
   }
+
   RuleTbl *ruletbl;
   std::vector<const Formula *> facts;
   std::vector<std::pair<uint64_t, uint64_t>> precedence;
   std::vector<Conc> conclusions;
   std::deque<Conc> processing;
   std::deque<Conc> remove;
+
+  // Arena for allocating nodes
+  std::vector<Node> Arena;
+
+  // Get the leaves from a given node
+  void get_leaves(Node &node, std::vector<Node *> &leaves) {
+    if (node.edges.empty()) {
+      leaves.push_back(&node);
+    } else {
+      for (size_t i = 0; i < node.edges.size(); ++i)
+        get_leaves(Arena[node.edges[i]], leaves);
+    }
+  }
+
+  std::vector<uint64_t> get_sat_rules(const Node &node) const {
+    std::vector<uint64_t> rules{};
+    for (const auto &[k, v] : *ruletbl)
+      if (v.getConsequent()->toString() == node.f->toString())
+        rules.push_back(k);
+    return rules; // Hope this does copy elision.
+  }
+
+  void get_higher_precedence_rules(uint64_t rule,
+                                   std::vector<uint64_t> &hrules) {
+    for (auto &[hi, i] : precedence) {
+      if (i == rule) {
+        hrules.push_back(hi);
+      }
+    }
+  }
+
+  // Process the node
+  void process_node(Node &node, std::vector<Node *> &&leaves) {
+    // First get all the leaves for this node
+    leaves.clear();           // reuse this vector
+    get_leaves(node, leaves); // leaves in the leaves vector
+    // Now get the rules that makes this node satisfied
+    std::vector<uint64_t> rules = get_sat_rules(node);
+
+    // If there is no rule that is needed to satisfy this node' formula then it
+    // has to be a fact (theorem)
+    if (rules.empty()) {
+      node.fact = true;
+      return;
+    }
+
+    // Now get the antecedents from each of these rules
+    for (const uint64_t key : rules) {
+      const Antecedent &ant = ruletbl->find(key).getAntecedents();
+      for (const Formula &f : ant) {
+        Arena.push_back({{}, &f, false});
+      }
+      // Now attach the nodes just pushed to the arena
+      for (size_t i = Arena.size() - ant.size(); i < Arena.size() - 1; ++i) {
+        Arena[i].edges.push_back(i + 1);
+      }
+      // Attach it to each of the leaves.
+      for (auto node : leaves) {
+        node->edges.push_back(Arena.size() - ant.size());
+      }
+      // Now check if any rule has higher precedence than the current
+      // rule?
+      std::vector<uint64_t> higher_rules;
+      get_higher_precedence_rules(key, higher_rules);
+      // Now get the not of the higher precedence rule' consequent.
+      for (auto i : higher_rules) {
+        const Formula *v = ruletbl->find(i).getConsequent();
+        if (v->isNot()) {
+          const Formula *cons = new Formula(v->getComplementInnerFormula());
+          Arena.push_back({{}, cons, false, true});
+        } else if (v->isAtom() || v->isOBL()) {
+          const Formula *cons = new Formula(v->getComplementFormula());
+          Arena.push_back({{}, cons, false, true});
+        }
+      }
+      // Now connect the higher precedence nodes one to another
+      for (size_t i = Arena.size() - higher_rules.size(); i < Arena.size() - 1;
+           ++i) {
+        Arena[i].edges.push_back(i + 1);
+      }
+      // Connect the last antecedent node to the first higher precedence node
+      Arena[Arena.size() - higher_rules.size() - 1].edges.push_back(
+          Arena.size() - higher_rules.size());
+    }
+    // Now we are done with this node, so we proceed with dfs
+    for (uint64_t x : node.edges) {
+      process_node(Arena[x], std::move(leaves));
+    }
+  }
+
+  void _get_facts(size_t index, std::vector<size_t> &facts,
+                  std::vector<std::vector<size_t>> &ffacts) {
+
+    if (Arena[index].fact) {
+      facts.push_back(index);
+    }
+
+    // We have reached the leaf node following this path, so copy the
+    // fact into the final facts vector.
+    if (Arena[index].edges.empty()) {
+      // copy the facts into the ffacts
+      ffacts.push_back(facts);
+      return;
+    }
+
+    for (size_t index : Arena[index].edges) {
+      _get_facts(index, facts, ffacts);
+      // Remove this node from the facts too
+      auto it = std::find(facts.begin(), facts.end(), index);
+      if (it != facts.end()) {
+        facts.erase(it);
+      }
+    }
+  }
+
+  void get_facts(std::vector<std::vector<size_t>> &facts) {
+    std::vector<size_t> mfacts;
+    // Start from the root node.
+    _get_facts(0, mfacts, facts);
+  }
+
+  // Backward chaining (reasoning) for getting the facts
+  void build_and_or_tree(const Formula &goal) {
+    // First make the node for the goal
+    Arena.push_back(Node{{}, &goal, false});
+    // Now just traverse the tree
+    process_node(Arena[0], {});
+    // Now just get the set of facts needed to prove the final goal.
+    std::vector<std::vector<size_t>> facts;
+    get_facts(facts);
+  }
 };
