@@ -1,11 +1,5 @@
 #include "ddlsolver.hpp"
 
-#include <_abort.h>
-#define __try if (true)
-#define __catch(X) if (false)
-#define __throw_exception_again
-void __throw_bad_exception() { abort(); }
-
 int main() {
   Variable X{"X"};
   Predicate P0("P0", {X});
