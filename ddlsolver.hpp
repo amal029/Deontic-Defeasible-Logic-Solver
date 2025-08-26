@@ -254,9 +254,6 @@ public:
                ? *this
                : OBL(std::get<PNot>(pformula).subsVartoAtom(x, y));
 
-    // if (std::holds_alternative<PNot>(pformula)) {
-    //   std::get<PNot>(pformula).subsVartoAtom(x, y);
-    // }
   }
 
 private:
@@ -1397,6 +1394,4 @@ private:
     // Start from the root node.
     _get_facts(0, mfacts, facts);
   }
-
-  // Backward chaining (reasoning) for getting the facts
 };
