@@ -1,5 +1,10 @@
 #include "ddlsolver.hpp"
-#include <algorithm>
+
+#include <_abort.h>
+#define __try if (true)
+#define __catch(X) if (false)
+#define __throw_exception_again
+void __throw_bad_exception() { abort(); }
 
 int main() {
   Variable X{"X"};

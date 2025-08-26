@@ -1,23 +1,16 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
 #include <deque>
-#include <functional>
-#include <initializer_list>
+#include <cassert>
 #include <iostream>
-#include <iterator>
 #include <numeric>
 #include <string>
-#include <sys/types.h>
 #include <unordered_map>
 #include <unordered_set>
-#include <utility>
 #include <variant>
 #include <vector>
+
 
 // The literal atom
 class Atom {
