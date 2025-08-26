@@ -153,9 +153,9 @@ public:
   ~PNot() {}
   std::string toString() const {
     if (std::holds_alternative<Atom>(l)) {
-      return std::get<Atom>(l).toString();
+      return "(Not " + std::get<Atom>(l).toString() + ")";
     } else
-      return std::get<Predicate>(l).toString();
+      return "(Not " + std::get<Predicate>(l).toString() + ")";
   }
   const LiteralType &getLiteral() const { return l; }
   PNot substituteProp(const Atom &x, const char *y) const {
@@ -619,12 +619,7 @@ using VarMap = std::unordered_map<Variable, Atom, VariableHash, VariableEq>;
 struct Node {
   std::vector<size_t> edges;
   const Formula *f;
-  bool fact;
-  bool tofree = false;
-  ~Node() {
-    if (tofree)
-      delete f;
-  }
+  bool tonot = false;
   std::string toString() const {
     std::string toret = "Node{" + f->toString() + ", ";
     toret += "Edges: [";
@@ -632,7 +627,7 @@ struct Node {
       toret += std::to_string(i) + " ";
     }
     toret += "], ";
-    toret += "fact: " + std::to_string(fact) + "}";
+    toret += "tonot: " + std::to_string(tonot) + "}";
     return toret;
   }
 };
@@ -1170,12 +1165,11 @@ private:
     // If there is no rule that is needed to satisfy this node' formula then it
     // has to be a fact (theorem)
     if (rules.empty()) {
-      Arena[node_index].fact = true;
 #ifdef DEBUG
       std::cout << "Done processing node: " << Arena[node_index].toString()
                 << "\n";
 #endif
-      return;
+      goto END;
     }
 
     // Now get the antecedents from each of these rules
@@ -1189,7 +1183,19 @@ private:
       std::cout << "\n";
 #endif
       for (const Formula &f : ant) {
-        Arena.push_back({{}, &f, false});
+        // XXX: If the current node being processed has tonot set then
+        // get the not of this antecedent.
+        if (!Arena[node_index].tonot)
+          Arena.push_back({{}, &f, false});
+        else {
+          if (f.isNot()) {
+            const Formula *cons = new Formula{f.getComplementInnerFormula()};
+            Arena.push_back({{}, cons, false});
+          } else {
+            const Formula *cons = new Formula{f.getComplementFormula()};
+            Arena.push_back({{}, cons, false});
+          }
+        }
       }
 
 #ifdef DEBUG
@@ -1238,16 +1244,17 @@ private:
       std::cout << "]\n";
 #endif
 
-      // Now get the not of the higher precedence rule' consequent.
+      // Now get the the higher precedence rule' consequent.
       for (auto i : higher_rules) {
         const Formula *v = ruletbl->find(i).getConsequent();
-        if (v->isNot()) {
-          const Formula *cons = new Formula(v->getComplementInnerFormula());
-          Arena.push_back({{}, cons, false, true});
-        } else if (v->isAtom() || v->isOBL()) {
-          const Formula *cons = new Formula(v->getComplementFormula());
-          Arena.push_back({{}, cons, false, true});
-        }
+        Arena.push_back({{}, v, true});
+        // if (v->isNot()) {
+        //   const Formula *cons = new Formula(v->getComplementInnerFormula());
+        //   Arena.push_back({{}, cons, true});
+        // } else if (v->isAtom() || v->isOBL()) {
+        //   const Formula *cons = new Formula(v->getComplementFormula());
+        //   Arena.push_back({{}, cons, true});
+        // }
       }
 
 #ifdef DEBUG
@@ -1283,7 +1290,7 @@ private:
               << "\n";
 #endif
     // Now we are done with this node, so we proceed with dfs
-    for (uint64_t x : Arena[node_index].edges) {
+  END: for (uint64_t x : Arena[node_index].edges) {
       process_node(x, std::move(leaves));
     }
   }
@@ -1292,7 +1299,7 @@ private:
                   std::vector<std::vector<Formula>> &ffacts) {
 
     // This guy makes a copy of the formula to be sent back.
-    if (index != 0)
+    if ((index != 0) && (!(Arena[index].tonot)))
       facts.push_back(Formula{*(Arena[index].f)});
 #ifdef DEBUG
     std::cout << "Facts: [";
@@ -1329,8 +1336,16 @@ private:
       }
       std::cout << "]\n";
 #endif
-
-      facts.erase(facts.cend() - 1);
+      auto it =
+          facts.empty()
+              ? facts.cend()
+              : std::find_if(
+                    facts.cend() - 1, facts.cbegin(), [&](const Formula &x) {
+                      return (x.toString() == Arena[index].f->toString());
+                    });
+      // facts.erase(facts.cend() - 1);
+      if (it != facts.cend())
+        facts.erase(it);
 #ifdef DEBUG
       std::cout << "after erasing Facts: [" << std::endl;
       for (const auto &x : facts) {

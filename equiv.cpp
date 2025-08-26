@@ -16,7 +16,7 @@ int main() {
   std::cout << "Theorems that need to hold for KB1\n";
   for (const auto &x : ret) {
     std::cout << "[";
-    std::for_each(x.begin(), x.end(),
+    std::for_each(x.cbegin(), x.cend(),
                   [](const Formula &x) { std::cout << x.toString() << " "; });
     std::cout << "]\n";
   }
@@ -30,7 +30,66 @@ int main() {
   ret = s2.build_and_or_tree(P2);
   for (const auto &x : ret) {
     std::cout << "[";
-    std::for_each(x.begin(), x.end(),
+    std::for_each(x.cbegin(), x.cend(),
+                  [](const Formula &x) { std::cout << x.toString() << " "; });
+    std::cout << "]\n";
+  }
+
+  // Example 2
+  Variable A{"A"};
+  Predicate A1("A1", {A});
+  Predicate A2("A2", {A});
+  Predicate A3("A3", {A});
+  Predicate A4("A4", {A});
+  RuleTbl KB3{};
+  KB3.insert(1, {{A4}, A3});
+  KB3.insert(2, {{A2}, A3});
+  KB3.insert(3, {{A1}, A2});
+
+  Solver s3{{}, &KB3, {}};
+  ret = s3.build_and_or_tree(A3);
+  std::cout << "Theorems that need to hold for KB3\n";
+  for (const auto &x : ret) {
+    std::cout << "[";
+    std::for_each(x.cbegin(), x.cend(),
+                  [](const Formula &x) { std::cout << x.toString() << " "; });
+    std::cout << "]\n";
+  }
+
+  RuleTbl KB4{};
+  KB4.insert(1, {{A1, A4}, A3});
+  Solver s4{{}, &KB4, {}};
+  ret = s4.build_and_or_tree(A3);
+  std::cout << "Theorems that need to hold for KB4\n";
+  for (const auto &x : ret) {
+    std::cout << "[";
+    std::for_each(x.cbegin(), x.cend(),
+                  [](const Formula &x) { std::cout << x.toString() << " "; });
+    std::cout << "]\n";
+  }
+
+  // Example 3
+  RuleTbl KB5{};
+  KB5.insert(1, {{A2}, A1});
+  KB5.insert(2, {{A4}, PNot(A1)});
+  Solver s5{{}, &KB5, {{2, 1}}};
+  ret = s5.build_and_or_tree(A1);
+  std::cout << "Theorems that need to hold for KB5\n";
+  for (const auto &x : ret) {
+    std::cout << "[";
+    std::for_each(x.cbegin(), x.cend(),
+                  [](const Formula &x) { std::cout << x.toString() << " "; });
+    std::cout << "]\n";
+  }
+
+  RuleTbl KB6{};
+  KB6.insert(1, {{A2, PNot(A4)}, A1});
+  Solver s6{{}, &KB6, {}};
+  ret = s6.build_and_or_tree(A1);
+  std::cout << "Theorems that need to hold for KB6\n";
+  for (const auto &x : ret) {
+    std::cout << "[";
+    std::for_each(x.cbegin(), x.cend(),
                   [](const Formula &x) { std::cout << x.toString() << " "; });
     std::cout << "]\n";
   }
