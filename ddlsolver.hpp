@@ -625,6 +625,16 @@ struct Node {
     if (tofree)
       delete f;
   }
+  std::string toString() const {
+    std::string toret = "Node{" + f->toString() + ", ";
+    toret += "Edges: [";
+    for (size_t i : edges) {
+      toret += std::to_string(i) + " ";
+    }
+    toret += "], ";
+    toret += "fact: " + std::to_string(fact) + "}";
+    return toret;
+  }
 };
 
 class Solver {
@@ -927,6 +937,33 @@ public:
   }
   ~Solver() {}
 
+  std::vector<std::vector<Formula>> build_and_or_tree(const Formula &goal) {
+    // First make the node for the goal
+    Arena.push_back(Node{{}, &goal, false});
+#ifdef DEBUG
+    std::cout << "------Nodes in arena before processing: \n";
+    for (const auto &x : Arena) {
+      std::cout << x.toString() << "\n";
+    }
+    std::cout << "------------------\n";
+#endif
+    // Now just traverse the tree
+    process_node(0, {});
+#ifdef DEBUG
+    std::cout << "-----Nodes in arena after processing: \n";
+    for (const auto &x : Arena) {
+      std::cout << x.toString() << "\n";
+    }
+    std::cout << "----------------\n";
+#endif    
+    // Now just get the set of facts needed to prove the final goal.
+    std::vector<std::vector<Formula>> facts;
+    get_facts(facts);
+
+    // Return the formula
+    return facts;
+  }
+
 private:
   // Removing from conclusions and processing as long as remove exists
   void backward_removal() {
@@ -1077,12 +1114,12 @@ private:
   std::vector<Node> Arena;
 
   // Get the leaves from a given node
-  void get_leaves(Node &node, std::vector<Node *> &leaves) {
-    if (node.edges.empty()) {
-      leaves.push_back(&node);
+  void get_leaves(size_t index, std::vector<size_t> &leaves) {
+    if (Arena[index].edges.empty()) {
+      leaves.push_back(index);
     } else {
-      for (size_t i = 0; i < node.edges.size(); ++i)
-        get_leaves(Arena[node.edges[i]], leaves);
+      for (size_t i : Arena[index].edges)
+        get_leaves(i, leaves);
     }
   }
 
@@ -1104,38 +1141,103 @@ private:
   }
 
   // Process the node
-  void process_node(Node &node, std::vector<Node *> &&leaves) {
+  void process_node(size_t node_index, std::vector<size_t> &&leaves) {
+#ifdef DEBUG
+    std::cout << "Processing node: " << Arena[node_index].toString() << "\n";
+    std::cout << "processing index: " << node_index << std::endl;
+#endif
     // First get all the leaves for this node
-    leaves.clear();           // reuse this vector
-    get_leaves(node, leaves); // leaves in the leaves vector
+    leaves.clear();                 // reuse this vector
+    get_leaves(node_index, leaves); // leaves in the leaves vector
+
+#ifdef DEBUG
+    std::cout << "The leaf nodes: \n";
+    for (const auto &x : leaves) {
+      std::cout << Arena[x].toString() << " ";
+    }
+    std::cout << "\n";
+#endif
     // Now get the rules that makes this node satisfied
-    std::vector<uint64_t> rules = get_sat_rules(node);
+    std::vector<uint64_t> rules = get_sat_rules(Arena[node_index]);
+#ifdef DEBUG
+    std::cout << "The sat rules: [";
+    for (const auto &x : rules) {
+      std::cout << ruletbl->find(x).toString() << " ";
+    }
+    std::cout << "]\nfor node: " << Arena[node_index].toString() << "\n";
+#endif
 
     // If there is no rule that is needed to satisfy this node' formula then it
     // has to be a fact (theorem)
     if (rules.empty()) {
-      node.fact = true;
+      Arena[node_index].fact = true;
+#ifdef DEBUG
+      std::cout << "Done processing node: " << Arena[node_index].toString()
+                << "\n";
+#endif
       return;
     }
 
     // Now get the antecedents from each of these rules
     for (const uint64_t key : rules) {
       const Antecedent &ant = ruletbl->find(key).getAntecedents();
+#ifdef DEBUG
+      std::cout << "Antecedents being attached: \n";
+      for (const auto &x : ant) {
+        std::cout << x.toString() << " ";
+      }
+      std::cout << "\n";
+#endif
       for (const Formula &f : ant) {
         Arena.push_back({{}, &f, false});
       }
+
+#ifdef DEBUG
+      std::cout << "Nodes in arena after pushing the antecedents: \n";
+      for (const auto &x : Arena) {
+        std::cout << x.toString() << "\n";
+      }
+#endif
+
       // Now attach the nodes just pushed to the arena
-      for (size_t i = Arena.size() - ant.size(); i < Arena.size() - 1; ++i) {
+      size_t i = Arena.size() - ant.size();
+      while (i < Arena.size() - 1) {
         Arena[i].edges.push_back(i + 1);
+        ++i;
       }
+#ifdef DEBUG
+      std::cout
+          << "Nodes in arena after attaching the antecedents to each other: \n";
+      for (const auto &x : Arena) {
+        std::cout << x.toString() << "\n";
+      }
+#endif
+
       // Attach it to each of the leaves.
-      for (auto node : leaves) {
-        node->edges.push_back(Arena.size() - ant.size());
+      for (size_t index : leaves) {
+        Arena[index].edges.push_back(Arena.size() - ant.size());
       }
+
+#ifdef DEBUG
+      std::cout
+          << "Nodes in arena after attaching the leaves to the antecedents: \n";
+      for (const auto &x : Arena) {
+        std::cout << x.toString() << "\n";
+      }
+#endif
+
       // Now check if any rule has higher precedence than the current
       // rule?
       std::vector<uint64_t> higher_rules;
       get_higher_precedence_rules(key, higher_rules);
+#ifdef DEBUG
+      std::cout << "The higher precedence rules: [";
+      for (uint64_t x : higher_rules) {
+        std::cout << ruletbl->find(x).toString() << " ";
+      }
+      std::cout << "]\n";
+#endif
+
       // Now get the not of the higher precedence rule' consequent.
       for (auto i : higher_rules) {
         const Formula *v = ruletbl->find(i).getConsequent();
@@ -1147,60 +1249,103 @@ private:
           Arena.push_back({{}, cons, false, true});
         }
       }
-      // Now connect the higher precedence nodes one to another
-      for (size_t i = Arena.size() - higher_rules.size(); i < Arena.size() - 1;
-           ++i) {
-        Arena[i].edges.push_back(i + 1);
+
+#ifdef DEBUG
+      std::cout
+          << "Nodes in arena after pushing the higher precedence rules: \n";
+      for (const auto &x : Arena) {
+        std::cout << x.toString() << "\n";
       }
+#endif
+
+      // Now connect the higher precedence nodes one to another
+      i = Arena.size() - higher_rules.size();
+      while (i < Arena.size() - 1) {
+        Arena[i].edges.push_back(i + 1);
+        ++i;
+      }
+
       // Connect the last antecedent node to the first higher precedence node
-      Arena[Arena.size() - higher_rules.size() - 1].edges.push_back(
-          Arena.size() - higher_rules.size());
+      if (!higher_rules.empty())
+        Arena[Arena.size() - higher_rules.size() - 1].edges.push_back(
+            Arena.size() - higher_rules.size());
+
+#ifdef DEBUG
+      std::cout << "Nodes in arena after attaching the higher precendence "
+                   "nodes to last antecedent node: \n";
+      for (const auto &x : Arena) {
+        std::cout << x.toString() << "\n";
+      }
+#endif
     }
+#ifdef DEBUG
+    std::cout << "Done processing node: " << Arena[node_index].toString()
+              << "\n";
+#endif
     // Now we are done with this node, so we proceed with dfs
-    for (uint64_t x : node.edges) {
-      process_node(Arena[x], std::move(leaves));
+    for (uint64_t x : Arena[node_index].edges) {
+      process_node(x, std::move(leaves));
     }
   }
 
-  void _get_facts(size_t index, std::vector<size_t> &facts,
-                  std::vector<std::vector<size_t>> &ffacts) {
+  void _get_facts(size_t index, std::vector<Formula> &facts,
+                  std::vector<std::vector<Formula>> &ffacts) {
 
-    if (Arena[index].fact) {
-      facts.push_back(index);
+    // This guy makes a copy of the formula to be sent back.
+    if (index != 0)
+      facts.push_back(Formula{*(Arena[index].f)});
+#ifdef DEBUG
+    std::cout << "Facts: [";
+    for (const auto &x : facts) {
+      std::cout << x.toString() << " ";
     }
+    std::cout << "]\n";
+#endif
 
     // We have reached the leaf node following this path, so copy the
     // fact into the final facts vector.
     if (Arena[index].edges.empty()) {
       // copy the facts into the ffacts
       ffacts.push_back(facts);
+#ifdef DEBUG
+      std::cout << "Final facts: [";
+      for (const auto &x : ffacts) {
+        std::cout << "[";
+        for (const auto &y : x) {
+          std::cout << y.toString() << " ";
+        }
+        std::cout << "]]\n";
+      }
+#endif
       return;
     }
 
     for (size_t index : Arena[index].edges) {
       _get_facts(index, facts, ffacts);
-      // Remove this node from the facts too
-      auto it = std::find(facts.begin(), facts.end(), index);
-      if (it != facts.end()) {
-        facts.erase(it);
+#ifdef DEBUG
+      std::cout << "before erasing Facts: [";
+      for (const auto &x : facts) {
+        std::cout << x.toString() << " ";
       }
+      std::cout << "]\n";
+#endif
+
+      facts.erase(facts.cend() - 1);
+#ifdef DEBUG
+      std::cout << "after erasing Facts: [" << std::endl;
+      for (const auto &x : facts) {
+        std::cout << x.toString() << " ";
+      }
+      std::cout << "]\n";
+#endif
     }
   }
 
-  void get_facts(std::vector<std::vector<size_t>> &facts) {
-    std::vector<size_t> mfacts;
+  void get_facts(std::vector<std::vector<Formula>> &facts) {
+    std::vector<Formula> mfacts;
     // Start from the root node.
     _get_facts(0, mfacts, facts);
   }
 
   // Backward chaining (reasoning) for getting the facts
-  void build_and_or_tree(const Formula &goal) {
-    // First make the node for the goal
-    Arena.push_back(Node{{}, &goal, false});
-    // Now just traverse the tree
-    process_node(Arena[0], {});
-    // Now just get the set of facts needed to prove the final goal.
-    std::vector<std::vector<size_t>> facts;
-    get_facts(facts);
-  }
 };
