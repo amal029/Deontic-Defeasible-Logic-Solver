@@ -57,10 +57,11 @@ private:
 using PredicateType = std::variant<Variable, Atom>;
 class Predicate {
 public:
-  Predicate(std::string &&name, std::initializer_list<PredicateType> &&args) noexcept
-    : args(std::move(args)), name(std::move(name)) {}
+  Predicate(std::string &&name,
+            std::initializer_list<PredicateType> &&args) noexcept
+      : args(std::move(args)), name(std::move(name)) {}
   Predicate(std::string name, std::vector<PredicateType> &&args)
-    : args(std::move(args)), name(std::move(name)) {}
+      : args(std::move(args)), name(std::move(name)) {}
 
   ~Predicate() {}
   std::string toString() const {
@@ -92,12 +93,12 @@ public:
     // accumulate the args inside this to check if there are any vars in
     // here!
     return std::accumulate(
-			   args.cbegin(), args.cend(), false,
-			   [&tocheck](const bool &y, const PredicateType &x) {
-			     return ((std::holds_alternative<Variable>(x)) &&
-				     (std::get<Variable>(x).getName() == tocheck.getName())) ||
-			       y;
-			   });
+        args.cbegin(), args.cend(), false,
+        [&tocheck](const bool &y, const PredicateType &x) {
+          return ((std::holds_alternative<Variable>(x)) &&
+                  (std::get<Variable>(x).getName() == tocheck.getName())) ||
+                 y;
+        });
   }
 
   Predicate subsVartoAtom(const Variable &x, const char *y) const {
@@ -368,8 +369,7 @@ public:
       return DNot(std::get<OBL>(formula));
     } else if (this->isPredicate()) {
       return PNot(std::get<Predicate>(formula));
-    }
-    else
+    } else
       assert(false);
   }
 
@@ -616,10 +616,32 @@ using VarMap = std::unordered_map<Variable, Atom, VariableHash, VariableEq>;
 
 // Backward chaining for getting the facts (propositions and predicates)
 // that are needed to satisfy the given goal.
-struct Node {
-  std::vector<size_t> edges;
-  const Formula *f;
-  bool tonot = false;
+class Node {
+public:
+  Node(std::vector<size_t> &&edges, const Formula *f, bool tonot)
+      : edges(edges), f(f), tonot(tonot) {}
+  Node(std::vector<size_t> &&edges, const Formula *f, bool tonot, bool tofree)
+      : edges(edges), f(f), tonot(tonot), tofree(tofree) {}
+
+  Node(const Node &) = delete;
+  Node operator=(const Node &) = delete;
+  Node operator=(Node &&) = delete;
+  
+  Node(Node &&n) {
+    this->edges = std::move(n.edges);
+    this->f = n.f;
+    this->tofree = n.tofree;
+    this->tonot = n.tonot;
+
+    // XXX: This is needed, because we want to not delete the heap
+    // allocated formula, and only do it when the final arena is
+    // deleted.
+    if (n.tofree)
+      n.tofree = false;
+  }
+  std::vector<size_t> &Edges() { return edges; }
+  const Formula *formula() const { return f; }
+  bool toNot() { return tonot; }
   std::string toString() const {
     std::string toret = "Node{" + f->toString() + ", ";
     toret += "Edges: [";
@@ -630,6 +652,18 @@ struct Node {
     toret += "tonot: " + std::to_string(tonot) + "}";
     return toret;
   }
+
+  ~Node() {
+    if (tofree) {
+      delete f;
+    }
+  }
+
+private:
+  std::vector<size_t> edges;
+  const Formula *f;
+  bool tonot = false;
+  bool tofree = false;
 };
 
 class Solver {
@@ -950,7 +984,7 @@ public:
       std::cout << x.toString() << "\n";
     }
     std::cout << "----------------\n";
-#endif    
+#endif
     // Now just get the set of facts needed to prove the final goal.
     std::vector<std::vector<Formula>> facts;
     get_facts(facts);
@@ -1110,10 +1144,10 @@ private:
 
   // Get the leaves from a given node
   void get_leaves(size_t index, std::vector<size_t> &leaves) {
-    if (Arena[index].edges.empty()) {
+    if (Arena[index].Edges().empty()) {
       leaves.push_back(index);
     } else {
-      for (size_t i : Arena[index].edges)
+      for (size_t i : Arena[index].Edges())
         get_leaves(i, leaves);
     }
   }
@@ -1121,7 +1155,7 @@ private:
   std::vector<uint64_t> get_sat_rules(const Node &node) const {
     std::vector<uint64_t> rules{};
     for (const auto &[k, v] : *ruletbl)
-      if (v.getConsequent()->toString() == node.f->toString())
+      if (v.getConsequent()->toString() == node.formula()->toString())
         rules.push_back(k);
     return rules; // Hope this does copy elision.
   }
@@ -1185,15 +1219,15 @@ private:
       for (const Formula &f : ant) {
         // XXX: If the current node being processed has tonot set then
         // get the not of this antecedent.
-        if (!Arena[node_index].tonot)
+        if (!Arena[node_index].toNot())
           Arena.push_back({{}, &f, false});
         else {
           if (f.isNot()) {
             const Formula *cons = new Formula{f.getComplementInnerFormula()};
-            Arena.push_back({{}, cons, false});
+            Arena.push_back({{}, cons, false, true});
           } else {
             const Formula *cons = new Formula{f.getComplementFormula()};
-            Arena.push_back({{}, cons, false});
+            Arena.push_back({{}, cons, false, true});
           }
         }
       }
@@ -1208,7 +1242,7 @@ private:
       // Now attach the nodes just pushed to the arena
       size_t i = Arena.size() - ant.size();
       while (i < Arena.size() - 1) {
-        Arena[i].edges.push_back(i + 1);
+        Arena[i].Edges().push_back(i + 1);
         ++i;
       }
 #ifdef DEBUG
@@ -1221,7 +1255,7 @@ private:
 
       // Attach it to each of the leaves.
       for (size_t index : leaves) {
-        Arena[index].edges.push_back(Arena.size() - ant.size());
+        Arena[index].Edges().push_back(Arena.size() - ant.size());
       }
 
 #ifdef DEBUG
@@ -1268,13 +1302,13 @@ private:
       // Now connect the higher precedence nodes one to another
       i = Arena.size() - higher_rules.size();
       while (i < Arena.size() - 1) {
-        Arena[i].edges.push_back(i + 1);
+        Arena[i].Edges().push_back(i + 1);
         ++i;
       }
 
       // Connect the last antecedent node to the first higher precedence node
       if (!higher_rules.empty())
-        Arena[Arena.size() - higher_rules.size() - 1].edges.push_back(
+        Arena[Arena.size() - higher_rules.size() - 1].Edges().push_back(
             Arena.size() - higher_rules.size());
 
 #ifdef DEBUG
@@ -1290,7 +1324,8 @@ private:
               << "\n";
 #endif
     // Now we are done with this node, so we proceed with dfs
-  END: for (uint64_t x : Arena[node_index].edges) {
+  END:
+    for (uint64_t x : Arena[node_index].Edges()) {
       process_node(x, std::move(leaves));
     }
   }
@@ -1299,8 +1334,8 @@ private:
                   std::vector<std::vector<Formula>> &ffacts) {
 
     // This guy makes a copy of the formula to be sent back.
-    if ((index != 0) && (!(Arena[index].tonot)))
-      facts.push_back(Formula{*(Arena[index].f)});
+    if ((index != 0) && (!(Arena[index].toNot())))
+      facts.push_back(Formula{*(Arena[index].formula())});
 #ifdef DEBUG
     std::cout << "Facts: [";
     for (const auto &x : facts) {
@@ -1311,7 +1346,7 @@ private:
 
     // We have reached the leaf node following this path, so copy the
     // fact into the final facts vector.
-    if (Arena[index].edges.empty()) {
+    if (Arena[index].Edges().empty()) {
       // copy the facts into the ffacts
       ffacts.push_back(facts);
 #ifdef DEBUG
@@ -1327,7 +1362,7 @@ private:
       return;
     }
 
-    for (size_t index : Arena[index].edges) {
+    for (size_t index : Arena[index].Edges()) {
       _get_facts(index, facts, ffacts);
 #ifdef DEBUG
       std::cout << "before erasing Facts: [";
@@ -1339,10 +1374,11 @@ private:
       auto it =
           facts.empty()
               ? facts.cend()
-              : std::find_if(
-                    facts.cend() - 1, facts.cbegin(), [&](const Formula &x) {
-                      return (x.toString() == Arena[index].f->toString());
-                    });
+              : std::find_if(facts.cend() - 1, facts.cbegin(),
+                             [&](const Formula &x) {
+                               return (x.toString() ==
+                                       Arena[index].formula()->toString());
+                             });
       // facts.erase(facts.cend() - 1);
       if (it != facts.cend())
         facts.erase(it);
