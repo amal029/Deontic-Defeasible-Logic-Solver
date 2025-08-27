@@ -12,7 +12,6 @@
 #include <variant>
 #include <vector>
 
-
 // The literal atom
 class Atom {
 public:
@@ -31,6 +30,10 @@ public:
   const std::string &getAtom() const { return atom; }
 
   bool operator==(const Atom &rhs) const { return atom == rhs.atom; }
+
+  template <typename T> Atom subsVartoAtom(const T &x, const char *y) const {
+    return *this;
+  }
 
   Atom substituteProp(const Atom &x, const char *y) const {
     if (x.toString() == this->atom) {
@@ -324,20 +327,9 @@ public:
   Formula(Formula &&) noexcept = default;
   ~Formula() {}
   bool operator==(const Formula &rhs) const { return formula == rhs.formula; }
+
   std::string toString() const {
-    std::string ss;
-    if (const auto l = std::get_if<Atom>(&formula)) {
-      ss = (*l).toString();
-    } else if (const auto p = std::get_if<PNot>(&formula)) {
-      ss = (*p).toString();
-    } else if (const auto o = std::get_if<OBL>(&formula)) {
-      ss = (*o).toString();
-    } else if (const auto d = std::get_if<DNot>(&formula)) {
-      ss = (*d).toString();
-    } else if (const auto d = std::get_if<Predicate>(&formula)) {
-      ss = (*d).toString();
-    }
-    return ss;
+    return std::visit([](const auto &x) { return x.toString(); }, formula);
   }
 
   // Get the predicate version of this formula
@@ -356,18 +348,9 @@ public:
   }
 
   Formula substituteProp(const Atom &x, const char *y) const {
-    if (std::holds_alternative<Atom>(formula)) {
-      return Formula(std::get<Atom>(formula).substituteProp(x, y));
-    } else if (std::holds_alternative<PNot>(formula)) {
-      return Formula(std::get<PNot>(formula).substituteProp(x, y));
-    } else if (std::holds_alternative<OBL>(formula)) {
-      return Formula(std::get<OBL>(formula).substituteProp(x, y));
-    } else if (std::holds_alternative<DNot>(formula)) {
-      return Formula(std::get<DNot>(formula).substituteProp(x, y));
-    } else {
-      // This is the predicate case
-      return Formula{std::get<Predicate>(formula).substituteProp(x, y)};
-    }
+    return std::visit(
+        [&x, &y](const auto &z) { return Formula{z.substituteProp(x, y)}; },
+        formula);
   }
 
   // Is this a complement.
@@ -453,17 +436,9 @@ public:
   }
 
   Formula subsVartoAtom(const Variable &x, const char *y) const {
-    if (std::holds_alternative<PNot>(formula)) {
-      return std::get<PNot>(formula).subsVartoAtom(x, y);
-    } else if (std::holds_alternative<OBL>(formula)) {
-      return std::get<OBL>(formula).subsVartoAtom(x, y);
-    } else if (std::holds_alternative<DNot>(formula)) {
-      return std::get<DNot>(formula).subsVartoAtom(x, y);
-    } else if (std::holds_alternative<Predicate>(formula)) {
-      return std::get<Predicate>(formula).subsVartoAtom(x, y);
-    } else {
-      return *this;
-    }
+    return std::visit(
+        [&x, &y](const auto &z) { return Formula{z.subsVartoAtom(x, y)}; },
+        formula);
   }
 
 private:
