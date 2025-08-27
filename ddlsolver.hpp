@@ -1065,16 +1065,14 @@ private:
 
   // Checking antecedent
   bool check_antecedents(const Implication &rule) {
-    std::vector<const Formula *> cons;
-    for (const auto &x : conclusions) {
-      cons.push_back(std::get<0>(x));
-    }
     size_t counter = 0;
     for (const auto &x : rule.getAntecedents()) {
-      if (std::find_if(cons.cbegin(), cons.cend(), [&x](const Formula *y) {
-            return *y == x;
-          }) != cons.end())
+      if (std::find_if(conclusions.cbegin(), conclusions.cend(),
+                       [&x](const auto &y) { return *y.first == x; }) !=
+          conclusions.end())
         counter++;
+      else
+        break;
     }
     return (counter == rule.getAntecedents().size());
   }
