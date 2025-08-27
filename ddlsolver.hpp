@@ -35,6 +35,8 @@ public:
     return *this;
   }
 
+  // template <typename T> T getPredicate() const { assert(false); }
+
   Atom substituteProp(const Atom &x, const char *y) const {
     if (x.toString() == this->atom) {
       return Atom(y);
@@ -101,6 +103,8 @@ public:
     }
     return name + "(" + toret + ")";
   }
+
+  Predicate getPredicate() const { return *this; }
 
   bool hasVariables() const {
     // accumulate the args inside this to check if there are any vars in
@@ -583,7 +587,7 @@ struct VariableHash {
 // The Formula equality
 struct VariableEq {
   bool operator()(const Variable &lhs, const Variable &rhs) const {
-    return lhs.toString() == rhs.toString();
+    return lhs == rhs;
   }
 };
 
@@ -601,7 +605,7 @@ public:
   Node(const Node &) = delete;
   Node operator=(const Node &) = delete;
   Node operator=(Node &&) = delete;
-  
+
   Node(Node &&n) {
     this->edges = std::move(n.edges);
     this->f = n.f;
@@ -888,8 +892,7 @@ public:
         subs.insert({std::get<Variable>(implp_arg), std::get<Atom>(concp_arg)});
       } else {
         // The atoms should match
-        toret &= (std::get<Atom>(concp_arg).toString() ==
-                  std::get<Atom>(implp_arg).toString());
+        toret &= (std::get<Atom>(concp_arg) == std::get<Atom>(implp_arg));
       }
     }
     return toret;
@@ -972,8 +975,10 @@ private:
   // Removing from conclusions and processing as long as remove exists
   void backward_removal() {
     while (!remove.empty()) {
-      const auto &[temp, rnum] = remove.front();
-      const std::string stemp{temp->toString()};
+      // const auto &[temp, rnum] = remove.front();
+      auto fpair = remove.front();
+      const Formula *temp = fpair.first;
+      auto rnum = fpair.second;
       remove.pop_front();
       // Get all the Formulas in conclusions/processing that are
       // triggerd by temp.
@@ -983,20 +988,20 @@ private:
           // Loop through the antecedents and check if this rule has
           // temp.
 #ifdef DEBUG
-          std::cout << "checking in antecedent formula: " << stemp << "\n";
+          std::cout << "checking in antecedent formula: " << temp->toString()
+                    << "\n";
           std::cout << "rule number being checked: "
                     << std::to_string(it->first) << "\n";
 #endif
           auto fit = std::find_if(
               trule.getAntecedents().begin(), trule.getAntecedents().end(),
-              [&stemp](const Formula &x) { return x.toString() == stemp; });
+              [&temp](const Formula &x) { return x == *temp; });
 
           if (fit != trule.getAntecedents().end()) {
             // We have the rule. Now get iterator from the conclusion
             // and processing to remove it from there.
             uint64_t ruleNum = std::get<0>(*it);
-            std::string consequent =
-                std::get<1>(*it).getConsequent()->toString();
+            const Formula *consequent = std::get<1>(*it).getConsequent();
 #ifdef DEBUG
             std::cout << "Trying to remove the consequent:" << consequent
                       << "\n";
@@ -1005,8 +1010,7 @@ private:
             auto cit = std::partition(conclusions.begin(), conclusions.end(),
                                       [&ruleNum, &consequent](const auto &x) {
                                         return (std::get<1>(x) == ruleNum &&
-                                                std::get<0>(x)->toString() ==
-                                                    consequent);
+                                                *x.first == *consequent);
                                       });
 #ifdef DEBUG
             std::string toret = "\nConclusions: ";
@@ -1024,12 +1028,12 @@ private:
             } else {
               // Remove from the processing queue if not in the
               // conclusion
-              auto cit = std::partition(processing.begin(), processing.end(),
-                                        [&ruleNum, &consequent](const auto &x) {
-                                          return (std::get<1>(x) == ruleNum &&
-                                                  std::get<0>(x)->toString() ==
-                                                      consequent);
-                                        });
+              auto cit =
+                  std::partition(processing.begin(), processing.end(),
+                                 [&ruleNum, &consequent](const auto &x) {
+                                   return (std::get<1>(x) == ruleNum &&
+                                           *std::get<0>(x) == *consequent);
+                                 });
               if (cit != processing.begin()) {
                 for (auto ccit = processing.begin(); ccit != cit; ++ccit)
                   remove.push_back(*ccit);
@@ -1061,13 +1065,15 @@ private:
 
   // Checking antecedent
   bool check_antecedents(const Implication &rule) {
-    std::vector<std::string> cons;
+    std::vector<const Formula *> cons;
     for (const auto &x : conclusions) {
-      cons.push_back(std::get<0>(x)->toString());
+      cons.push_back(std::get<0>(x));
     }
     size_t counter = 0;
     for (const auto &x : rule.getAntecedents()) {
-      if (std::find(cons.cbegin(), cons.cend(), x.toString()) != cons.end())
+      if (std::find_if(cons.cbegin(), cons.cend(), [&x](const Formula *y) {
+            return *y == x;
+          }) != cons.end())
         counter++;
     }
     return (counter == rule.getAntecedents().size());
@@ -1130,7 +1136,7 @@ private:
   std::vector<uint64_t> get_sat_rules(const Node &node) const {
     std::vector<uint64_t> rules{};
     for (const auto &[k, v] : *ruletbl)
-      if (v.getConsequent()->toString() == node.formula()->toString())
+      if (*v.getConsequent() == *node.formula())
         rules.push_back(k);
     return rules; // Hope this does copy elision.
   }
@@ -1346,14 +1352,12 @@ private:
       }
       std::cout << "]\n";
 #endif
-      auto it =
-          facts.empty()
-              ? facts.cend()
-              : std::find_if(facts.cend() - 1, facts.cbegin(),
-                             [&](const Formula &x) {
-                               return (x.toString() ==
-                                       Arena[index].formula()->toString());
-                             });
+      auto it = facts.empty()
+                    ? facts.cend()
+                    : std::find_if(facts.cend() - 1, facts.cbegin(),
+                                   [&](const Formula &x) {
+                                     return (x == *Arena[index].formula());
+                                   });
       // facts.erase(facts.cend() - 1);
       if (it != facts.cend())
         facts.erase(it);
