@@ -23,6 +23,14 @@ public:
   Atom &operator=(Atom &&other) = default;
   ~Atom() {}
   std::string toString() const { return atom; }
+  template <typename T> bool getMatchingPredicate(const T &x) const {
+    return false;
+  }
+  bool hasVariables() const { return false; }
+
+  const std::string &getAtom() const { return atom; }
+
+  bool operator==(const Atom &rhs) const { return atom == rhs.atom; }
 
   Atom substituteProp(const Atom &x, const char *y) const {
     if (x.toString() == this->atom) {
@@ -35,6 +43,10 @@ private:
   std::string atom;
 };
 
+// bool operator==(const Atom &lhs, const Atom &rhs) {
+//   return lhs.getAtom() == rhs.getAtom();
+// }
+
 // We need the variable class/type
 class Variable {
 public:
@@ -42,10 +54,15 @@ public:
   ~Variable() {}
   std::string toString() const { return "Var(" + name + ")"; }
   const std::string &getName() const { return name; }
+  bool operator==(const Variable &rhs) const { return name == rhs.name; }
 
 private:
   std::string name;
 };
+
+// bool operator==(const Variable &lhs, const Variable &rhs) {
+//   return lhs.getName() == rhs.getName();
+// }
 
 // Now need the predicate class
 using PredicateType = std::variant<Variable, Atom>;
@@ -56,6 +73,14 @@ public:
       : args(std::move(args)), name(std::move(name)) {}
   Predicate(std::string name, std::vector<PredicateType> &&args)
       : args(std::move(args)), name(std::move(name)) {}
+
+  bool operator==(const Predicate &rhs) const {
+    // First make sure that the args are equal
+    bool res = std::equal(args.cbegin(), args.cend(), rhs.args.cbegin(),
+                          [](const PredicateType &lhs,
+                             const PredicateType &rhs) { return lhs == rhs; });
+    return res && (name == rhs.name);
+  }
 
   ~Predicate() {}
   std::string toString() const {
@@ -146,6 +171,7 @@ public:
   PNot &operator=(const PNot &) noexcept = default;
   PNot(PNot &&) noexcept = default;
   ~PNot() {}
+  bool operator==(const PNot &rhs) const { return l == rhs.getLiteral(); }
   std::string toString() const {
     if (std::holds_alternative<Atom>(l)) {
       return "(Not " + std::get<Atom>(l).toString() + ")";
@@ -204,6 +230,7 @@ public:
   OBL &operator=(const OBL &) = default;
   OBL(OBL &&) = default;
   ~OBL() {}
+  bool operator==(const OBL &rhs) const { return pformula == rhs.pformula; }
   std::string toString() const {
     if (const auto p = std::get_if<Atom>(&pformula)) {
       return "(O " + (*p).toString() + ")";
@@ -247,7 +274,6 @@ public:
     return (std::holds_alternative<Atom>(pformula))
                ? *this
                : OBL(std::get<PNot>(pformula).subsVartoAtom(x, y));
-
   }
 
 private:
@@ -260,6 +286,7 @@ public:
   DNot(const DNot &) = default;
   DNot &operator=(const DNot &) noexcept = default;
   DNot(DNot &&) noexcept = default;
+  bool operator==(const DNot &rhs) const { return o == rhs.getOBL(); }
   ~DNot() {}
   std::string toString() const { return "(Not " + o.toString() + ")"; }
   const OBL &getOBL() const { return o; }
@@ -296,6 +323,7 @@ public:
   Formula &operator=(const Formula &) noexcept = default;
   Formula(Formula &&) noexcept = default;
   ~Formula() {}
+  bool operator==(const Formula &rhs) const { return formula == rhs.formula; }
   std::string toString() const {
     std::string ss;
     if (const auto l = std::get_if<Atom>(&formula)) {
@@ -416,31 +444,12 @@ public:
   }
 
   bool hasVariables() const {
-    if (std::holds_alternative<Atom>(formula)) {
-      return false;
-    } else if (std::holds_alternative<PNot>(formula)) {
-      return std::get<PNot>(formula).hasVariables();
-    } else if (std::holds_alternative<OBL>(formula)) {
-      return std::get<OBL>(formula).hasVariables();
-    } else if (std::holds_alternative<DNot>(formula)) {
-      return std::get<DNot>(formula).hasVariables();
-    } else {
-      return std::get<Predicate>(formula).hasVariables();
-    }
+    return std::visit([](const auto &y) { return y.hasVariables(); }, formula);
   }
 
   bool getMatchingPredicate(const Predicate &x) const {
-    if (std::holds_alternative<Atom>(formula)) {
-      return false;
-    } else if (std::holds_alternative<PNot>(formula)) {
-      return std::get<PNot>(formula).getMatchingPredicate(x);
-    } else if (std::holds_alternative<OBL>(formula)) {
-      return std::get<OBL>(formula).getMatchingPredicate(x);
-    } else if (std::holds_alternative<DNot>(formula)) {
-      return std::get<DNot>(formula).getMatchingPredicate(x);
-    } else {
-      return std::get<Predicate>(formula).getMatchingPredicate(x);
-    }
+    return std::visit([&x](const auto &y) { return y.getMatchingPredicate(x); },
+                      formula);
   }
 
   Formula subsVartoAtom(const Variable &x, const char *y) const {
@@ -471,7 +480,7 @@ struct FormulaHash {
 // The Formula equality
 struct FormulaEq {
   bool operator()(const Formula &lhs, const Formula &rhs) const {
-    return lhs.toString() == rhs.toString();
+    return lhs == rhs;
   }
 };
 
