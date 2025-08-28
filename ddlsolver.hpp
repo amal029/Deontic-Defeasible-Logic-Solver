@@ -12,6 +12,15 @@
 #include <variant>
 #include <vector>
 
+#ifdef DEBUG
+#define DD(x)                                                                  \
+  do {                                                                         \
+    x                                                                          \
+  } while (0);
+#else
+#define DD(x)
+#endif
+
 // The literal atom
 class Atom {
 public:
@@ -136,9 +145,7 @@ public:
       }
     }
     Predicate toret{name, std::move(rargs)};
-#ifdef DEBUG
-    std::cout << "return predicate " << toret.toString() << "\n";
-#endif
+    DD(std::cout << "return predicate " << toret.toString() << "\n";)
     return toret;
   }
 
@@ -508,9 +515,8 @@ public:
       it = std::find_if(std::next(it), antecedents.end(),
                         [](const Formula &x) { return x.hasVariables(); });
     }
-#ifdef DEBUG
-    std::cout << "Got the predicates with vars in implication\n";
-#endif
+
+    DD(std::cout << "Got the predicates with vars in implication\n";)
   }
 
   Implication subsVartoAtom(const Variable &v, const char *atom) const {
@@ -527,9 +533,8 @@ public:
                         ? Formula{consequent.subsVartoAtom(v, atom)}
                         : consequent;
     Implication toret{std::move(rantecedents), std::move(rcons)};
-#ifdef DEBUG
-    std::cout << "conclusion implication: " << this->toString() << "\n";
-#endif
+
+    DD(std::cout << "conclusion implication: " << this->toString() << "\n";)
     return toret;
   }
 
@@ -658,47 +663,35 @@ public:
     for (const auto &x : facts) {
       processing.push_back({x, 0});
     }
-#ifdef DEBUG
-    std::cout << this->toString() << "\n";
-#endif
+    DD(std::cout << this->toString() << "\n";)
     // 2. Now loop until the queue is done
     while (!processing.empty()) {
-#ifdef DEBUG
-      std::cout << "temp : " << this->toString() << "\n";
-#endif
+      DD(std::cout << "temp : " << this->toString() << "\n";)
       Conc &temp = processing.front();
       processing.pop_front(); // remove the rule from processing.
       // Check if this rule has a higher precedence rule in the
       // conclusions already
       auto iter = check_precedence(std::get<1>(temp), HL::HIGHER);
       if (iter != conclusions.begin()) {
-#ifdef DEBUG
-        std::cout << "Found a higher precedence rule in conclusions\n";
-        std::cout << "Not adding " << temp.first->toString()
-                  << " to conclusions \n";
-#endif
+        DD(std::cout << "Found a higher precedence rule in conclusions\n";
+           std::cout << "Not adding " << temp.first->toString()
+                     << " to conclusions \n";)
         // We have a higher precedence rule in the conclusions, so don't
         // add this one.
         continue;
       }
       iter = check_precedence(std::get<1>(temp), HL::LOWER);
       if (iter != conclusions.begin()) {
-#ifdef DEBUG
-        std::cout << "Found a lower precedence conclusion " << "\n";
-#endif
+        DD(std::cout << "Found a lower precedence conclusion " << "\n";)
         // a. First remove everything from start of conclusions to this
         // iterator and then move them to the remove list
         for (auto it = conclusions.begin(); it != iter; ++it)
           remove.push_back(*it);
-#ifdef DEBUG
-        std::cout << this->toString() << "\n";
-#endif
+        DD(std::cout << this->toString() << "\n";)
         // Now remove all these from the conclusions.
         conclusions.erase(conclusions.begin(), iter);
-#ifdef DEBUG
-        std::cout << "after erasing from conclusions: " << this->toString()
-                  << "\n";
-#endif
+        DD(std::cout << "after erasing from conclusions: " << this->toString()
+                     << "\n";)
         // backward removal
         backward_removal();
       }
@@ -709,24 +702,18 @@ public:
       // Finally we can add this rule to the conclusions and trigger the
       // required implications.
       conclusions.push_back(std::move(temp));
-#ifdef DEBUG
-      std::cout << this->toString() << "\n";
-#endif
+      DD(std::cout << this->toString() << "\n";)
       // Now enable all the possible implications
       for (auto it = ruletbl->begin(); it != ruletbl->end(); ++it) {
         if (!it->second.getDone() && it->second.hasVariables()) {
           // XXX: We perform unification here
           // Implication out{it->second}; // copy constructor call here
-#ifdef DEBUG
-          std::cout << "entering unify\n";
-#endif
+          DD(std::cout << "entering unify\n";)
           if (unify(it->second)) {
             std::get<1>(*it)
                 .setDone(); // setting the original implication as done
-#ifdef DEBUG
-            std::cout << "Adding the consequent: "
-                      << it->second.getConsequent()->toString() << "\n";
-#endif
+            DD(std::cout << "Adding the consequent: "
+                         << it->second.getConsequent()->toString() << "\n";)
             processing.push_back(
                 {it->second.getConsequent(), std::get<0>(*it)});
           }
@@ -764,11 +751,9 @@ public:
     // Go through every predicate (with a variable) one by one
     std::vector<Predicate> ps;
     out.getPredicateWithVar(ps);
-#ifdef DEBUG
-    std::cout << "Predicates with Var in implication: \n";
-    for_each(ps.begin(), ps.end(),
-             [](const Predicate &x) { std::cout << x.toString() << "\n"; });
-#endif
+    DD(std::cout << "Predicates with Var in implication: \n";
+       for_each(ps.begin(), ps.end(),
+                [](const Predicate &x) { std::cout << x.toString() << "\n"; });)
     if (ps.empty())
       return toret; // No predicates with variables to unify
 
@@ -786,15 +771,13 @@ public:
       else
         concps.push_back(res);
     }
-#ifdef DEBUG
-    std::cout << "Predicates in conclusions: \n";
-    for_each(concps.begin(), concps.end(), [](const auto &x) {
-      std::cout << "[";
-      for_each(x.begin(), x.end(),
-               [](const Predicate &y) { std::cout << y.toString() << " "; });
-      std::cout << "]\n";
-    });
-#endif
+    DD(std::cout << "Predicates in conclusions: \n";
+       for_each(concps.begin(), concps.end(), [](const auto &x) {
+         std::cout << "[";
+         for_each(x.begin(), x.end(),
+                  [](const Predicate &y) { std::cout << y.toString() << " "; });
+         std::cout << "]\n";
+       });)
 
     if (concps.size() != ps.size())
       return toret;
@@ -822,17 +805,14 @@ public:
                           });
     } else
       cartresianconcps = std::move(concps);
-#ifdef DEBUG
-    std::cout << "Predicates in cartresian: \n";
-    for_each(cartresianconcps.begin(), cartresianconcps.end(),
-             [](const auto &x) {
-               std::cout << "[";
-               for_each(x.begin(), x.end(), [](const Predicate &y) {
-                 std::cout << y.toString() << " ";
-               });
-               std::cout << "]\n";
+    DD(std::cout << "Predicates in cartresian: \n"; for_each(
+           cartresianconcps.begin(), cartresianconcps.end(), [](const auto &x) {
+             std::cout << "[";
+             for_each(x.begin(), x.end(), [](const Predicate &y) {
+               std::cout << y.toString() << " ";
              });
-#endif
+             std::cout << "]\n";
+           });)
     // 3. Now we have the cartresian product of the conclusion
     // predicates. Now we can start performing substitution.
     for (const auto &x : cartresianconcps) {
@@ -841,33 +821,26 @@ public:
       for (size_t i = 0; i < ps.size(); ++i) {
         const Predicate &concp = x[i];
         const Predicate &implp = ps[i];
-#ifdef DEBUG
-        std::cout << "comparing: impl predicate: " << implp.toString()
-                  << " conc predicate :" << concp.toString() << "\n";
-#endif
+        DD(std::cout << "comparing: impl predicate: " << implp.toString()
+                     << " conc predicate :" << concp.toString() << "\n";)
         VarMap subs;
         if (!getSubstitutes(concp, implp, subs))
           break;
-#ifdef DEBUG
-        for (const auto &[k, v] : subs) {
+        DD(for (const auto &[k, v] : subs) {
           std::cout << "key: " << k.toString() << " value: " << v.toString()
                     << "\n";
-        }
-#endif
+        })
         // Now replace all the variables with Atoms in the
         // Implication.
         for (const auto &[key, value] : subs)
           if (temp.hasVariable(key))
             temp = temp.subsVartoAtom(key, value.toString().c_str());
       }
-#ifdef DEBUG
-      std::cout << "after replacement implication: " << temp.toString() << "\n";
-#endif
+      DD(std::cout << "after replacement implication: " << temp.toString()
+                   << "\n";)
       // Now check if antecendets are satisfied
       if (check_antecedents(temp)) {
-#ifdef DEBUG
-        std::cout << "Antecedents met! Triggering the consequent\n";
-#endif
+        DD(std::cout << "Antecedents met! Triggering the consequent\n";)
         toret = true;
         out = std::move(temp);
         break;
@@ -947,22 +920,18 @@ public:
   std::vector<std::vector<Formula>> build_and_or_tree(const Formula &goal) {
     // First make the node for the goal
     Arena.push_back(Node{{}, &goal, false});
-#ifdef DEBUG
-    std::cout << "------Nodes in arena before processing: \n";
-    for (const auto &x : Arena) {
-      std::cout << x.toString() << "\n";
-    }
-    std::cout << "------------------\n";
-#endif
+    DD(std::cout << "------Nodes in arena before processing: \n";
+       for (const auto &x : Arena) {
+         std::cout << x.toString() << "\n";
+       } std::cout
+       << "------------------\n";)
     // Now just traverse the tree
     process_node(0, {});
-#ifdef DEBUG
-    std::cout << "-----Nodes in arena after processing: \n";
-    for (const auto &x : Arena) {
-      std::cout << x.toString() << "\n";
-    }
-    std::cout << "----------------\n";
-#endif
+    DD(std::cout << "-----Nodes in arena after processing: \n";
+       for (const auto &x : Arena) {
+         std::cout << x.toString() << "\n";
+       } std::cout
+       << "----------------\n";)
     // Now just get the set of facts needed to prove the final goal.
     std::vector<std::vector<Formula>> facts;
     get_facts(facts);
@@ -987,12 +956,10 @@ private:
         if (trule.getDone()) {
           // Loop through the antecedents and check if this rule has
           // temp.
-#ifdef DEBUG
-          std::cout << "checking in antecedent formula: " << temp->toString()
-                    << "\n";
-          std::cout << "rule number being checked: "
-                    << std::to_string(it->first) << "\n";
-#endif
+          DD(std::cout << "checking in antecedent formula: " << temp->toString()
+                       << "\n";
+             std::cout << "rule number being checked: "
+                       << std::to_string(it->first) << "\n";)
           auto fit = std::find_if(
               trule.getAntecedents().begin(), trule.getAntecedents().end(),
               [&temp](const Formula &x) { return x == *temp; });
@@ -1002,25 +969,21 @@ private:
             // and processing to remove it from there.
             uint64_t ruleNum = std::get<0>(*it);
             const Formula *consequent = std::get<1>(*it).getConsequent();
-#ifdef DEBUG
-            std::cout << "Trying to remove the consequent:" << consequent
-                      << "\n";
-#endif
+            DD(std::cout << "Trying to remove the consequent:" << consequent
+                         << "\n";)
             // Get the iterator from the conclusions
             auto cit = std::partition(conclusions.begin(), conclusions.end(),
                                       [&ruleNum, &consequent](const auto &x) {
                                         return (std::get<1>(x) == ruleNum &&
                                                 *x.first == *consequent);
                                       });
-#ifdef DEBUG
-            std::string toret = "\nConclusions: ";
-            std::for_each(conclusions.cbegin(), conclusions.cend(),
-                          [&toret](const Conc &x) {
-                            toret += x.first->toString() + " " +
-                                     std::to_string(x.second) + ", ";
-                          });
-            std::cout << toret << "\n";
-#endif
+            DD(std::string toret = "\nConclusions: ";
+               std::for_each(conclusions.cbegin(), conclusions.cend(),
+                             [&toret](const Conc &x) {
+                               toret += x.first->toString() + " " +
+                                        std::to_string(x.second) + ", ";
+                             });
+               std::cout << toret << "\n";)
             if (cit != conclusions.begin()) {
               for (auto ccit = conclusions.begin(); ccit != cit; ++ccit)
                 remove.push_back(*ccit);
@@ -1040,23 +1003,21 @@ private:
                 processing.erase(processing.begin(), cit);
               }
             }
-#ifdef DEBUG
-            toret = "\n Remove: ";
-            std::for_each(remove.cbegin(), remove.cend(),
-                          [&toret](const Conc &x) {
-                            toret += x.first->toString() + " " +
-                                     std::to_string(x.second) + ", ";
-                          });
-            std::cout << toret << "\n";
+            DD(std::string toret = "\n Remove: ";
+               std::for_each(remove.cbegin(), remove.cend(),
+                             [&toret](const Conc &x) {
+                               toret += x.first->toString() + " " +
+                                        std::to_string(x.second) + ", ";
+                             });
+               std::cout << toret << "\n";
 
-            toret = "\nConclusions: ";
-            std::for_each(conclusions.cbegin(), conclusions.cend(),
-                          [&toret](const Conc &x) {
-                            toret += x.first->toString() + " " +
-                                     std::to_string(x.second) + ", ";
-                          });
-            std::cout << toret << "\n";
-#endif
+               toret = "\nConclusions: ";
+               std::for_each(conclusions.cbegin(), conclusions.cend(),
+                             [&toret](const Conc &x) {
+                               toret += x.first->toString() + " " +
+                                        std::to_string(x.second) + ", ";
+                             });
+               std::cout << toret << "\n";)
           }
         }
       }
@@ -1079,9 +1040,7 @@ private:
 
   // Checking if the conclusion already has a higher order rule
   std::vector<Conc>::iterator check_precedence(uint64_t rNum, HL lh) {
-#ifdef DEBUG
-    std::cout << "check precedence: " << rNum << "\n";
-#endif
+    DD(std::cout << "check precedence: " << rNum << "\n";)
     std::vector<uint64_t> hls;
     for (size_t i = 0; i < precedence.size(); ++i) {
       if (lh == HL::HIGHER && (std::get<1>(precedence[i]) == rNum)) {
@@ -1092,10 +1051,8 @@ private:
         hls.push_back(std::get<1>(precedence[i]));
       }
     }
-#ifdef DEBUG
-    for (auto it = hls.cbegin(); it != hls.cend(); ++it)
-      std::cout << *it << "\n";
-#endif
+    DD(for (auto it = hls.cbegin(); it != hls.cend(); ++it) std::cout << *it
+                                                                      << "\n";)
     // Now check if there are any!
     if (hls.empty()) {
       return conclusions.begin();
@@ -1150,51 +1107,39 @@ private:
 
   // Process the node
   void process_node(size_t node_index, std::vector<size_t> &&leaves) {
-#ifdef DEBUG
-    std::cout << "Processing node: " << Arena[node_index].toString() << "\n";
-    std::cout << "processing index: " << node_index << std::endl;
-#endif
+    DD(std::cout << "Processing node: " << Arena[node_index].toString() << "\n";
+       std::cout << "processing index: " << node_index << std::endl;)
     // First get all the leaves for this node
     leaves.clear();                 // reuse this vector
     get_leaves(node_index, leaves); // leaves in the leaves vector
 
-#ifdef DEBUG
-    std::cout << "The leaf nodes: \n";
-    for (const auto &x : leaves) {
+    DD(std::cout << "The leaf nodes: \n"; for (const auto &x : leaves) {
       std::cout << Arena[x].toString() << " ";
-    }
-    std::cout << "\n";
-#endif
+    } std::cout << "\n";)
     // Now get the rules that makes this node satisfied
     std::vector<uint64_t> rules = get_sat_rules(Arena[node_index]);
-#ifdef DEBUG
-    std::cout << "The sat rules: [";
-    for (const auto &x : rules) {
+
+    DD(std::cout << "The sat rules: ["; for (const auto &x : rules) {
       std::cout << ruletbl->find(x).toString() << " ";
-    }
-    std::cout << "]\nfor node: " << Arena[node_index].toString() << "\n";
-#endif
+    } std::cout << "]\nfor node: "
+                << Arena[node_index].toString() << "\n";)
 
     // If there is no rule that is needed to satisfy this node' formula then it
     // has to be a fact (theorem)
     if (rules.empty()) {
-#ifdef DEBUG
-      std::cout << "Done processing node: " << Arena[node_index].toString()
-                << "\n";
-#endif
+      DD(std::cout << "Done processing node: " << Arena[node_index].toString()
+                   << "\n";)
       goto END;
     }
 
     // Now get the antecedents from each of these rules
     for (const uint64_t key : rules) {
       const Antecedent &ant = ruletbl->find(key).getAntecedents();
-#ifdef DEBUG
-      std::cout << "Antecedents being attached: \n";
-      for (const auto &x : ant) {
-        std::cout << x.toString() << " ";
-      }
-      std::cout << "\n";
-#endif
+      DD(std::cout << "Antecedents being attached: \n";
+         for (const auto &x : ant) {
+           std::cout << x.toString() << " ";
+         } std::cout
+         << "\n";)
       for (const Formula &f : ant) {
         // XXX: If the current node being processed has tonot set then
         // get the not of this antecedent.
@@ -1211,12 +1156,8 @@ private:
         }
       }
 
-#ifdef DEBUG
-      std::cout << "Nodes in arena after pushing the antecedents: \n";
-      for (const auto &x : Arena) {
-        std::cout << x.toString() << "\n";
-      }
-#endif
+      DD(std::cout << "Nodes in arena after pushing the antecedents: \n";
+         for (const auto &x : Arena) { std::cout << x.toString() << "\n"; })
 
       // Now attach the nodes just pushed to the arena
       size_t i = Arena.size() - ant.size();
@@ -1224,59 +1165,40 @@ private:
         Arena[i].Edges().push_back(i + 1);
         ++i;
       }
-#ifdef DEBUG
-      std::cout
-          << "Nodes in arena after attaching the antecedents to each other: \n";
-      for (const auto &x : Arena) {
-        std::cout << x.toString() << "\n";
-      }
-#endif
+
+      DD(std::cout << "Nodes in arena after attaching the antecedents to each "
+                      "other: \n";
+         for (const auto &x : Arena) { std::cout << x.toString() << "\n"; })
 
       // Attach it to each of the leaves.
       for (size_t index : leaves) {
         Arena[index].Edges().push_back(Arena.size() - ant.size());
       }
 
-#ifdef DEBUG
-      std::cout
-          << "Nodes in arena after attaching the leaves to the antecedents: \n";
-      for (const auto &x : Arena) {
-        std::cout << x.toString() << "\n";
-      }
-#endif
+      DD(std::cout << "Nodes in arena after attaching the leaves to the "
+                      "antecedents: \n";
+         for (const auto &x : Arena) { std::cout << x.toString() << "\n"; })
 
       // Now check if any rule has higher precedence than the current
       // rule?
       std::vector<uint64_t> higher_rules;
       get_higher_precedence_rules(key, higher_rules);
-#ifdef DEBUG
-      std::cout << "The higher precedence rules: [";
-      for (uint64_t x : higher_rules) {
-        std::cout << ruletbl->find(x).toString() << " ";
-      }
-      std::cout << "]\n";
-#endif
+
+      DD(std::cout << "The higher precedence rules: [";
+         for (uint64_t x : higher_rules) {
+           std::cout << ruletbl->find(x).toString() << " ";
+         } std::cout
+         << "]\n";)
 
       // Now get the the higher precedence rule' consequent.
       for (auto i : higher_rules) {
         const Formula *v = ruletbl->find(i).getConsequent();
         Arena.push_back({{}, v, true});
-        // if (v->isNot()) {
-        //   const Formula *cons = new Formula(v->getComplementInnerFormula());
-        //   Arena.push_back({{}, cons, true});
-        // } else if (v->isAtom() || v->isOBL()) {
-        //   const Formula *cons = new Formula(v->getComplementFormula());
-        //   Arena.push_back({{}, cons, true});
-        // }
       }
 
-#ifdef DEBUG
-      std::cout
-          << "Nodes in arena after pushing the higher precedence rules: \n";
-      for (const auto &x : Arena) {
-        std::cout << x.toString() << "\n";
-      }
-#endif
+      DD(std::cout
+             << "Nodes in arena after pushing the higher precedence rules: \n";
+         for (const auto &x : Arena) { std::cout << x.toString() << "\n"; })
 
       // Now connect the higher precedence nodes one to another
       i = Arena.size() - higher_rules.size();
@@ -1290,18 +1212,14 @@ private:
         Arena[Arena.size() - higher_rules.size() - 1].Edges().push_back(
             Arena.size() - higher_rules.size());
 
-#ifdef DEBUG
-      std::cout << "Nodes in arena after attaching the higher precendence "
-                   "nodes to last antecedent node: \n";
-      for (const auto &x : Arena) {
-        std::cout << x.toString() << "\n";
-      }
-#endif
+      DD(std::cout << "Nodes in arena after attaching the higher precendence "
+                      "nodes to last antecedent node: \n";
+         for (const auto &x : Arena) { std::cout << x.toString() << "\n"; })
     }
-#ifdef DEBUG
-    std::cout << "Done processing node: " << Arena[node_index].toString()
-              << "\n";
-#endif
+
+    DD(std::cout << "Done processing node: " << Arena[node_index].toString()
+                 << "\n";)
+
     // Now we are done with this node, so we proceed with dfs
   END:
     for (uint64_t x : Arena[node_index].Edges()) {
@@ -1315,41 +1233,35 @@ private:
     // This guy makes a copy of the formula to be sent back.
     if ((index != 0) && (!(Arena[index].toNot())))
       facts.push_back(Formula{*(Arena[index].formula())});
-#ifdef DEBUG
-    std::cout << "Facts: [";
-    for (const auto &x : facts) {
+
+    DD(std::cout << "Facts: ["; for (const auto &x : facts) {
       std::cout << x.toString() << " ";
-    }
-    std::cout << "]\n";
-#endif
+    } std::cout << "]\n";)
 
     // We have reached the leaf node following this path, so copy the
     // fact into the final facts vector.
     if (Arena[index].Edges().empty()) {
       // copy the facts into the ffacts
       ffacts.push_back(facts);
-#ifdef DEBUG
-      std::cout << "Final facts: [";
-      for (const auto &x : ffacts) {
+
+      DD(std::cout << "Final facts: ["; for (const auto &x : ffacts) {
         std::cout << "[";
         for (const auto &y : x) {
           std::cout << y.toString() << " ";
         }
         std::cout << "]]\n";
-      }
-#endif
+      })
+
       return;
     }
 
     for (size_t index : Arena[index].Edges()) {
       _get_facts(index, facts, ffacts);
-#ifdef DEBUG
-      std::cout << "before erasing Facts: [";
-      for (const auto &x : facts) {
+
+      DD(std::cout << "before erasing Facts: ["; for (const auto &x : facts) {
         std::cout << x.toString() << " ";
-      }
-      std::cout << "]\n";
-#endif
+      } std::cout << "]\n";)
+
       auto it = facts.empty()
                     ? facts.cend()
                     : std::find_if(facts.cend() - 1, facts.cbegin(),
@@ -1359,13 +1271,12 @@ private:
       // facts.erase(facts.cend() - 1);
       if (it != facts.cend())
         facts.erase(it);
-#ifdef DEBUG
-      std::cout << "after erasing Facts: [" << std::endl;
-      for (const auto &x : facts) {
-        std::cout << x.toString() << " ";
-      }
-      std::cout << "]\n";
-#endif
+
+      DD(std::cout << "after erasing Facts: [" << std::endl;
+         for (const auto &x : facts) {
+           std::cout << x.toString() << " ";
+         } std::cout
+         << "]\n";)
     }
   }
 
