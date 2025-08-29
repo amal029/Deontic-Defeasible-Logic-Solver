@@ -1,9 +1,9 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <deque>
-#include <cassert>
 #include <iostream>
 #include <numeric>
 #include <string>
@@ -44,7 +44,7 @@ public:
     return *this;
   }
 
-  // template <typename T> T getPredicate() const { assert(false); }
+  template <typename T> bool hasVariable(const T &_) const { return false; }
 
   Atom substituteProp(const Atom &x, const char *y) const {
     if (x.toString() == this->atom) {
@@ -56,10 +56,6 @@ public:
 private:
   std::string atom;
 };
-
-// bool operator==(const Atom &lhs, const Atom &rhs) {
-//   return lhs.getAtom() == rhs.getAtom();
-// }
 
 // We need the variable class/type
 class Variable {
@@ -73,10 +69,6 @@ public:
 private:
   std::string name;
 };
-
-// bool operator==(const Variable &lhs, const Variable &rhs) {
-//   return lhs.getName() == rhs.getName();
-// }
 
 // Now need the predicate class
 using PredicateType = std::variant<Variable, Atom>;
@@ -424,17 +416,8 @@ public:
   }
 
   bool hasVariable(const Variable &tocheck) const {
-    if (std::holds_alternative<Atom>(formula)) {
-      return false;
-    } else if (std::holds_alternative<PNot>(formula)) {
-      return std::get<PNot>(formula).hasVariable(tocheck);
-    } else if (std::holds_alternative<OBL>(formula)) {
-      return std::get<OBL>(formula).hasVariable(tocheck);
-    } else if (std::holds_alternative<DNot>(formula)) {
-      return std::get<DNot>(formula).hasVariable(tocheck);
-    } else {
-      return std::get<Predicate>(formula).hasVariable(tocheck);
-    }
+    return std::visit(
+        [&tocheck](const auto &y) { return y.hasVariable(tocheck); }, formula);
   }
 
   bool hasVariables() const {
