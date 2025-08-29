@@ -539,7 +539,7 @@ public:
     assert(rnum > 0);
     auto res = rules.find(rnum);
     if (res != rules.end()) {
-      std::cout << "Rule already in the rule table\n";
+      std::cerr << "Rule already in the rule table\n";
       assert(false);
     }
     rules.insert({rnum, std::move(rule)});
