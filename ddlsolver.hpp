@@ -589,6 +589,9 @@ public:
       : edges(edges), f(f), tonot(tonot) {}
   Node(std::vector<size_t> &&edges, const Formula *f, bool tonot, bool tofree)
       : edges(edges), f(f), tonot(tonot), tofree(tofree) {}
+  Node(std::vector<size_t> &&edges, const Formula *f, bool tonot, bool tofree,
+       bool torep)
+      : edges(edges), f(f), tonot(tonot), tofree(tofree), torep(torep) {}
 
   Node(const Node &) = delete;
   Node operator=(const Node &) = delete;
@@ -599,6 +602,7 @@ public:
     this->f = n.f;
     this->tofree = n.tofree;
     this->tonot = n.tonot;
+    this->torep = n.torep;
 
     // XXX: This is needed, because we want to not delete the heap
     // allocated formula, and only do it when the final arena is
@@ -608,7 +612,9 @@ public:
   }
   std::vector<size_t> &Edges() { return edges; }
   const Formula *formula() const { return f; }
-  bool toNot() { return tonot; }
+  bool toNot() const { return tonot; }
+  bool toRep() const { return torep; }
+  void setRep() { torep = true; }
   std::string toString() const {
     std::string toret = "Node{" + f->toString() + ", ";
     toret += "Edges: [";
@@ -616,6 +622,7 @@ public:
       toret += std::to_string(i) + " ";
     }
     toret += "], ";
+    toret += "torep: " + std::to_string(torep) + ", ";
     toret += "tonot: " + std::to_string(tonot) + "}";
     return toret;
   }
@@ -631,6 +638,7 @@ private:
   const Formula *f;
   bool tonot = false;
   bool tofree = false;
+  bool torep = false;
 };
 
 class Solver {
@@ -1075,7 +1083,7 @@ private:
     }
   }
 
-  std::vector<uint64_t> get_sat_rules(const Node &node) const {
+  std::vector<uint64_t> get_sat_rules(Node &node) const {
     std::vector<uint64_t> rules{};
     for (const auto &[k, v] : *ruletbl)
       // FIXME: This should be fixed for predicates, yes! We might need
@@ -1084,6 +1092,16 @@ private:
       // name.
       if (*v.getConsequent() == *node.formula())
         rules.push_back(k);
+      else {
+        // Now match the name and arity of the predicates (possibly
+        // inside other formula like Not, etc)
+        if (!v.getConsequent()->isAtom() && !node.formula()->isAtom() &&
+            v.getConsequent()->getMatchingPredicate(
+                node.formula()->getPredicate())) {
+          node.setRep();
+          rules.push_back(k);
+        }
+      }
     return rules; // Hope this does copy elision.
   }
 
