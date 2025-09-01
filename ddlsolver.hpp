@@ -712,8 +712,8 @@ public:
     return ret;
   }
 
-  std::vector<Predicate> getConclusionPredicate(const Predicate &in,
-                                                std::vector<Predicate> &toret) {
+  void getConclusionPredicate(const Predicate &in,
+                              std::vector<Predicate> &toret) {
     auto it = std::find_if(
         conclusions.cbegin(), conclusions.cend(),
         [&in](const Conc &x) { return (x.first)->getMatchingPredicate(in); });
@@ -724,7 +724,6 @@ public:
             return (x.first)->getMatchingPredicate(in);
           });
     }
-    return toret;
   }
 
   // This can possibly be NP-hard
