@@ -690,11 +690,9 @@ public:
       for (auto it = ruletbl->begin(); it != ruletbl->end(); ++it) {
         if (!it->second.getDone() && it->second.hasVariables()) {
           // XXX: We perform unification here
-          // Implication out{it->second}; // copy constructor call here
           DD(std::cout << "entering unify\n";)
           if (unify(it->second)) {
-            std::get<1>(*it)
-                .setDone(); // setting the original implication as done
+            std::get<1>(*it).setDone(); // original implication done
             DD(std::cout << "Adding the consequent: "
                          << it->second.getConsequent()->toString() << "\n";)
             processing.push_back(
