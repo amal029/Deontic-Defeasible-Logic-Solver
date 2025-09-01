@@ -11,7 +11,7 @@ int main() {
   Solver s1{{}, &KB, {}};
   
   // The above two should be logically equivalent
-  auto ret = s1.build_and_or_tree(P2);
+  auto ret = s1.backward_chain(P2);
   std::cout << "Theorems that need to hold for KB1\n";
   for (const auto &x : ret) {
     std::cout << "[";
@@ -20,13 +20,13 @@ int main() {
     std::cout << "]\n";
   }
 
-  // // Make another knowledge base
+  // Make another knowledge base
   RuleTbl KB2{};
   KB2.insert(1, {{P1, P0}, P2});
   Solver s2{{}, &KB2, {}};
 
   std::cout << "Theorems that need to hold for KB2\n";
-  ret = s2.build_and_or_tree(P2);
+  ret = s2.backward_chain(P2);
   for (const auto &x : ret) {
     std::cout << "[";
     std::for_each(x.cbegin(), x.cend(),
@@ -46,7 +46,7 @@ int main() {
   KB3.insert(3, {{A1}, A2});
 
   Solver s3{{}, &KB3, {}};
-  ret = s3.build_and_or_tree(A3);
+  ret = s3.backward_chain(A3);
   std::cout << "Theorems that need to hold for KB3\n";
   for (const auto &x : ret) {
     std::cout << "[";
@@ -58,7 +58,7 @@ int main() {
   RuleTbl KB4{};
   KB4.insert(1, {{A1, A4}, A3});
   Solver s4{{}, &KB4, {}};
-  ret = s4.build_and_or_tree(A3);
+  ret = s4.backward_chain(A3);
   std::cout << "Theorems that need to hold for KB4\n";
   for (const auto &x : ret) {
     std::cout << "[";
@@ -72,7 +72,7 @@ int main() {
   KB5.insert(1, {{A2}, A1});
   KB5.insert(2, {{A4}, PNot(A1)});
   Solver s5{{}, &KB5, {{2, 1}}};
-  ret = s5.build_and_or_tree(A1);
+  ret = s5.backward_chain(A1);
   std::cout << "Theorems that need to hold for KB5\n";
   for (const auto &x : ret) {
     std::cout << "[";
@@ -84,7 +84,7 @@ int main() {
   RuleTbl KB6{};
   KB6.insert(1, {{A2, PNot(A4)}, A1});
   Solver s6{{}, &KB6, {}};
-  ret = s6.build_and_or_tree(A1);
+  ret = s6.backward_chain(A1);
   std::cout << "Theorems that need to hold for KB6\n";
   for (const auto &x : ret) {
     std::cout << "[";

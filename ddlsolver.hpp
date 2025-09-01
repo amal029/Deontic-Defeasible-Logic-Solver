@@ -897,7 +897,7 @@ public:
   }
   ~Solver() {}
 
-  std::vector<std::vector<Formula>> build_and_or_tree(const Formula &goal) {
+  std::vector<std::vector<Formula>> backward_chain(const Formula &goal) {
     // First make the node for the goal
     Arena.push_back(Node{{}, &goal, false});
     DD(std::cout << "------Nodes in arena before processing: \n";
@@ -912,12 +912,20 @@ public:
          std::cout << x.toString() << "\n";
        } std::cout
        << "----------------\n";)
+
     // Now just get the set of facts needed to prove the final goal.
     std::vector<std::vector<Formula>> facts;
     get_facts(facts);
-
     // Return the formula
     return facts;
+  }
+
+  // Walk the AND-OR tree
+  void walk_and_or_tree(int index = 0) {
+    std::cout << Arena[index].toString() << "\n";
+    for (size_t index : Arena[index].Edges()) {
+      walk_and_or_tree(index);
+    }
   }
 
 private:
@@ -1070,6 +1078,10 @@ private:
   std::vector<uint64_t> get_sat_rules(const Node &node) const {
     std::vector<uint64_t> rules{};
     for (const auto &[k, v] : *ruletbl)
+      // FIXME: This should be fixed for predicates, yes! We might need
+      // to replace the variable with te node' variables if this is a
+      // predicate and the name and arity match, but not the variable
+      // name.
       if (*v.getConsequent() == *node.formula())
         rules.push_back(k);
     return rules; // Hope this does copy elision.
@@ -1097,6 +1109,9 @@ private:
     } std::cout << "\n";)
     // Now get the rules that makes this node satisfied
     std::vector<uint64_t> rules = get_sat_rules(Arena[node_index]);
+    // FIXME: We should get a bool from above, stating if the
+    // consequent' variable was placed. If so, then we will need to
+    // replace the antecedent' variables too.
 
     DD(std::cout << "The sat rules: ["; for (const auto &x : rules) {
       std::cout << ruletbl->find(x).toString() << " ";
@@ -1114,6 +1129,8 @@ private:
     // Now get the antecedents from each of these rules
     for (const uint64_t key : rules) {
       const Antecedent &ant = ruletbl->find(key).getAntecedents();
+      // FIXME: Replace the variable in antecedent with the
+      // consequents/goals' variables.
       DD(std::cout << "Antecedents being attached: \n";
          for (const auto &x : ant) {
            std::cout << x.toString() << " ";
