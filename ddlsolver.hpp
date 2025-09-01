@@ -930,7 +930,6 @@ private:
       // const auto &[temp, rnum] = remove.front();
       auto fpair = remove.front();
       const Formula *temp = fpair.first;
-      auto rnum = fpair.second;
       remove.pop_front();
       // Get all the Formulas in conclusions/processing that are
       // triggerd by temp.
