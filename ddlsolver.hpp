@@ -35,6 +35,7 @@ public:
     return false;
   }
   bool hasVariables() const { return false; }
+  bool hasPredicate() const { return false; }
 
   const std::string &getAtom() const { return atom; }
 
@@ -42,6 +43,10 @@ public:
 
   template <typename T> Atom subsVartoAtom(const T &x, const char *y) const {
     return *this;
+  }
+
+  template <typename T> Atom subsVartoVar(const T &x, const T &y) const {
+    assert(false);
   }
 
   template <typename T> bool hasVariable(const T &_) const { return false; }
@@ -106,6 +111,7 @@ public:
   }
 
   Predicate getPredicate() const { return *this; }
+  bool hasPredicate() const { return true; }
 
   bool hasVariables() const {
     // accumulate the args inside this to check if there are any vars in
@@ -126,6 +132,20 @@ public:
                   (std::get<Variable>(x).getName() == tocheck.getName())) ||
                  y;
         });
+  }
+
+  // I have only put this here
+  Predicate subsVartoVar(const Variable &x, const Variable &y) const {
+    std::vector<PredicateType> rargs{args};
+    for (size_t counter = 0; counter < rargs.size(); ++counter) {
+      if (std::holds_alternative<Variable>(rargs[counter]) &&
+          std::get<Variable>(rargs[counter]).getName() == x.getName()) {
+        rargs[counter] = y;
+      }
+    }
+    Predicate toret{name, std::move(rargs)};
+    DD(std::cout << "return predicate " << toret.toString() << "\n";)
+    return toret;
   }
 
   Predicate subsVartoAtom(const Variable &x, const char *y) const {
@@ -198,6 +218,10 @@ public:
                : false;
   }
 
+  bool hasPredicate() const {
+    return (std::holds_alternative<Predicate>(l)) ? true : false;
+  }
+
   bool hasVariables() const {
     return (std::holds_alternative<Predicate>(l))
                ? std::get<Predicate>(l).hasVariables()
@@ -215,6 +239,12 @@ public:
     return (std::holds_alternative<Predicate>(l))
                ? std::get<Predicate>(l).getMatchingPredicate(x)
                : false;
+  }
+
+  PNot subsVartoVar(const Variable &x, const Variable &y) const {
+    return (std::holds_alternative<Atom>(l))
+               ? *this
+               : PNot(std::get<Predicate>(l).subsVartoVar(x, y));
   }
 
   PNot subsVartoAtom(const Variable &x, const char *y) const {
@@ -257,6 +287,12 @@ public:
                : false;
   }
 
+  bool hasPredicate() const {
+    return (std::holds_alternative<PNot>(pformula))
+               ? std::get<PNot>(pformula).hasPredicate()
+               : false;
+  }
+
   bool hasVariables() const {
     return (std::holds_alternative<PNot>(pformula))
                ? std::get<PNot>(pformula).hasVariables()
@@ -274,6 +310,12 @@ public:
     return (std::holds_alternative<PNot>(pformula))
                ? std::get<PNot>(pformula).getMatchingPredicate(x)
                : false;
+  }
+
+  OBL subsVartoVar(const Variable &x, const Variable &y) const {
+    return (std::holds_alternative<Atom>(pformula))
+               ? *this
+               : OBL(std::get<PNot>(pformula).subsVartoVar(x, y));
   }
 
   OBL subsVartoAtom(const Variable &x, const char *y) const {
@@ -302,12 +344,18 @@ public:
   }
 
   bool hasVariables() const { return o.hasVariables(); }
+  bool hasPredicate() const { return o.hasPredicate(); }
   bool hasVariable(const Variable &tocheck) const {
     return o.hasVariable(tocheck);
   }
   bool getMatchingPredicate(const Predicate &x) const {
     return o.getMatchingPredicate(x);
   }
+
+  DNot subsVartoVar(const Variable &x, const Variable &y) const {
+    return o.subsVartoVar(x, y);
+  }
+
   DNot subsVartoAtom(const Variable &x, const char *y) const {
     return o.subsVartoAtom(x, y);
   }
@@ -415,6 +463,10 @@ public:
     return "";
   }
 
+  bool hasPredicate() const {
+    return std::visit([](const auto &y) { return y.hasPredicate(); }, formula);
+  }
+
   bool hasVariable(const Variable &tocheck) const {
     return std::visit(
         [&tocheck](const auto &y) { return y.hasVariable(tocheck); }, formula);
@@ -432,6 +484,12 @@ public:
   Formula subsVartoAtom(const Variable &x, const char *y) const {
     return std::visit(
         [&x, &y](const auto &z) { return Formula{z.subsVartoAtom(x, y)}; },
+        formula);
+  }
+
+  Formula subsVartoVar(const Variable &x, const Variable &y) const {
+    return std::visit(
+        [&x, &y](const auto &z) { return Formula{z.subsVartoVar(x, y)}; },
         formula);
   }
 
@@ -502,6 +560,24 @@ public:
     DD(std::cout << "Got the predicates with vars in implication\n";)
   }
 
+  Implication subsVartoVar(const Variable &v, const Variable &atom) const {
+    // Go through all the antecedents and replace the variable with the
+    // atom
+    Antecedent rantecedents;
+    for (auto it = antecedents.begin(); it != antecedents.end(); ++it) {
+      if (it->hasVariable(v)) {
+        rantecedents.insert(it->subsVartoVar(v, atom));
+      } else
+        rantecedents.insert(*it);
+    }
+    Formula rcons = consequent.hasVariable(v)
+                        ? Formula{consequent.subsVartoVar(v, atom)}
+                        : consequent;
+    Implication toret{std::move(rantecedents), std::move(rcons)};
+    DD(std::cout << "conclusion implication: " << this->toString() << "\n";)
+    return toret;
+  }
+
   Implication subsVartoAtom(const Variable &v, const char *atom) const {
     // Go through all the antecedents and replace the variable with the
     // atom
@@ -525,7 +601,7 @@ private:
   Antecedent antecedents;
   Formula consequent;
   bool done = false;
-};
+  };
 
 // The rules type (hashtable rule# -> Formula)
 class RuleTbl {
@@ -1083,23 +1159,66 @@ private:
     }
   }
 
-  std::vector<uint64_t> get_sat_rules(Node &node) const {
+  // Subs for get_sat_rules
+  template <typename T, typename U>
+  bool subs(const T &x, const T &cparv, U &temp) {
+    bool ret = true;
+    if ((std::holds_alternative<Atom>(x)) &&
+        (std::holds_alternative<Variable>(cparv)))
+      temp = temp.subsVartoAtom(std::get<Variable>(cparv),
+                                std::get<Atom>(x).toString().c_str());
+    else if ((std::holds_alternative<Atom>(x)) &&
+             (std::holds_alternative<Atom>(cparv)) && !(cparv == x))
+      ret = false;
+    else if ((std::holds_alternative<Variable>(x)) &&
+             (std::holds_alternative<Variable>(cparv)))
+      temp =
+          temp.subsVartoVar(std::get<Variable>(cparv), std::get<Variable>(x));
+    else
+      ret = false;
+    return ret;
+  }
+
+  std::vector<uint64_t> get_sat_rules(const Node &node) {
     std::vector<uint64_t> rules{};
-    for (const auto &[k, v] : *ruletbl)
-      // FIXME: This should be fixed for predicates, yes! We might need
-      // to replace the variable with te node' variables if this is a
-      // predicate and the name and arity match, but not the variable
-      // name.
-      if (*v.getConsequent() == *node.formula())
+    for (auto &[k, v] : *ruletbl)
+      if (!v.getConsequent()->hasVariables() &&
+          *v.getConsequent() == *node.formula())
         rules.push_back(k);
       else {
-        // Now match the name and arity of the predicates (possibly
-        // inside other formula like Not, etc)
-        if (!v.getConsequent()->isAtom() && !node.formula()->isAtom() &&
+        // Now we need to unify the goal the consequent if we can.
+        if (node.formula()->hasPredicate() &&
             v.getConsequent()->getMatchingPredicate(
                 node.formula()->getPredicate())) {
-          node.setRep();
-          rules.push_back(k);
+          // 1. Get the variables inside the consequent' predicate
+          Predicate cpar = v.getConsequent()->getPredicate();
+          // Get the goal predicate' variables/atoms
+          Predicate gpred = node.formula()->getPredicate();
+          if (cpar.getArity() == gpred.getArity()) {
+            // Replace the cpar variables with the gpred variables/atoms
+            // in consequent.
+            size_t counter = 0;
+            Formula temp = *v.getConsequent();
+            for (const auto &x : gpred.getArgs()) {
+              auto cparv = cpar.getArgs()[counter];
+              if (!subs(x, cparv, temp))
+                break;
+              counter++;
+            }
+            // Now check the temp with the node
+            if (temp == *node.formula()) {
+              counter = 0;
+              // unified the consequent and the goal.
+              for (const auto &x : gpred.getArgs()) {
+                // Here we should update the whole implication by
+                // replacing the variables with the correct variables of
+                // atoms from the goal.
+                assert(subs(x, cpar.getArgs()[counter], v));
+                ++counter;
+              }
+              rules.push_back(k);
+            }
+          }
         }
       }
     return rules; // Hope this does copy elision.
@@ -1127,9 +1246,6 @@ private:
     } std::cout << "\n";)
     // Now get the rules that makes this node satisfied
     std::vector<uint64_t> rules = get_sat_rules(Arena[node_index]);
-    // FIXME: We should get a bool from above, stating if the
-    // consequent' variable was placed. If so, then we will need to
-    // replace the antecedent' variables too.
 
     DD(std::cout << "The sat rules: ["; for (const auto &x : rules) {
       std::cout << ruletbl->find(x).toString() << " ";
