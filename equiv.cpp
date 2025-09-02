@@ -93,5 +93,27 @@ int main() {
     std::cout << "]\n";
   }
 
+  // Example 4
+  RuleTbl KB7{};
+  Variable Z{"Z"}, Y{"Y"};
+  Predicate P3{"P3", {Z, Y}};
+  P2 = Predicate{"P2", {Y}};
+  P1 = Predicate{"P1", {Z}};
+  Predicate P11{"P1", {X}};
+  Variable L{"L"}, T{"T"};
+  Predicate Goal("P3", {L, T});
+  P0 = Predicate{"P0", {X}};
+  KB7.insert(1, {{P1, P2}, OBL{P3}});
+  KB7.insert(2, {{P0}, P11});
+  Solver s7{{}, &KB7, {}};
+  ret = s7.backward_inference(OBL{Goal});
+  std::cout << "Theorems that need to hold for KB7\n";
+  for (const auto &x : ret) {
+    std::cout << "[";
+    std::for_each(x.cbegin(), x.cend(),
+                  [](const Formula &x) { std::cout << x.toString() << " "; });
+    std::cout << "]\n";
+  }
+
   return 0;
 }

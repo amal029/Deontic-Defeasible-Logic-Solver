@@ -3,14 +3,14 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <deque>
 #include <iostream>
 #include <numeric>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <variant>
 #include <vector>
+#include <unordered_map>
+#include <deque>
 
 #ifdef DEBUG
 #define DD(x)                                                                  \
@@ -601,7 +601,7 @@ private:
   Antecedent antecedents;
   Formula consequent;
   bool done = false;
-  };
+};
 
 // The rules type (hashtable rule# -> Formula)
 class RuleTbl {
@@ -665,9 +665,6 @@ public:
       : edges(edges), f(f), tonot(tonot) {}
   Node(std::vector<size_t> &&edges, const Formula *f, bool tonot, bool tofree)
       : edges(edges), f(f), tonot(tonot), tofree(tofree) {}
-  Node(std::vector<size_t> &&edges, const Formula *f, bool tonot, bool tofree,
-       bool torep)
-      : edges(edges), f(f), tonot(tonot), tofree(tofree), torep(torep) {}
 
   Node(const Node &) = delete;
   Node operator=(const Node &) = delete;
@@ -678,7 +675,6 @@ public:
     this->f = n.f;
     this->tofree = n.tofree;
     this->tonot = n.tonot;
-    this->torep = n.torep;
 
     // XXX: This is needed, because we want to not delete the heap
     // allocated formula, and only do it when the final arena is
@@ -689,8 +685,6 @@ public:
   std::vector<size_t> &Edges() { return edges; }
   const Formula *formula() const { return f; }
   bool toNot() const { return tonot; }
-  bool toRep() const { return torep; }
-  void setRep() { torep = true; }
   std::string toString() const {
     std::string toret = "Node{" + f->toString() + ", ";
     toret += "Edges: [";
@@ -698,7 +692,6 @@ public:
       toret += std::to_string(i) + " ";
     }
     toret += "], ";
-    toret += "torep: " + std::to_string(torep) + ", ";
     toret += "tonot: " + std::to_string(tonot) + "}";
     return toret;
   }
@@ -714,7 +707,6 @@ private:
   const Formula *f;
   bool tonot = false;
   bool tofree = false;
-  bool torep = false;
 };
 
 class Solver {
@@ -1182,42 +1174,38 @@ private:
   std::vector<uint64_t> get_sat_rules(const Node &node) {
     std::vector<uint64_t> rules{};
     for (auto &[k, v] : *ruletbl)
-      if (!v.getConsequent()->hasVariables() &&
-          *v.getConsequent() == *node.formula())
+      if (*v.getConsequent() == *node.formula())
         rules.push_back(k);
       else {
-        // Now we need to unify the goal the consequent if we can.
+        // Now we need to unify the goal and the consequent if we can.
         if (node.formula()->hasPredicate() &&
             v.getConsequent()->getMatchingPredicate(
                 node.formula()->getPredicate())) {
           // 1. Get the variables inside the consequent' predicate
-          Predicate cpar = v.getConsequent()->getPredicate();
+          Predicate cpar{v.getConsequent()->getPredicate()};
           // Get the goal predicate' variables/atoms
-          Predicate gpred = node.formula()->getPredicate();
-          if (cpar.getArity() == gpred.getArity()) {
-            // Replace the cpar variables with the gpred variables/atoms
-            // in consequent.
-            size_t counter = 0;
-            Formula temp = *v.getConsequent();
+          Predicate gpred{node.formula()->getPredicate()};
+          // Replace the cpar variables with the gpred variables/atoms
+          // in consequent.
+          size_t counter = 0;
+          Formula temp{*v.getConsequent()};
+          for (const auto &x : gpred.getArgs()) {
+            auto cparv = cpar.getArgs()[counter];
+            if (!subs(x, cparv, temp))
+              break;
+            counter++;
+          }
+          // Now check the temp with the node
+          if (temp == *node.formula()) {
+            counter = 0;
+            // unified the consequent and the goal.
             for (const auto &x : gpred.getArgs()) {
-              auto cparv = cpar.getArgs()[counter];
-              if (!subs(x, cparv, temp))
-                break;
-              counter++;
+              // Updating the variables in the implication with the
+              // atoms/variables from the goal.
+              assert(subs(x, cpar.getArgs()[counter], v));
+              ++counter;
             }
-            // Now check the temp with the node
-            if (temp == *node.formula()) {
-              counter = 0;
-              // unified the consequent and the goal.
-              for (const auto &x : gpred.getArgs()) {
-                // Here we should update the whole implication by
-                // replacing the variables with the correct variables of
-                // atoms from the goal.
-                assert(subs(x, cpar.getArgs()[counter], v));
-                ++counter;
-              }
-              rules.push_back(k);
-            }
+            rules.push_back(k);
           }
         }
       }
