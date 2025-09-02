@@ -3,14 +3,14 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <deque>
 #include <iostream>
 #include <numeric>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <variant>
 #include <vector>
-#include <unordered_map>
-#include <deque>
 
 #ifdef DEBUG
 #define DD(x)                                                                  \
@@ -31,7 +31,7 @@ public:
   Atom &operator=(Atom &&other) = default;
   ~Atom() {}
   std::string toString() const { return atom; }
-  template <typename T> bool getMatchingPredicate(const T &x) const {
+  template <typename T> bool getMatchingPredicate(const T &) const {
     return false;
   }
   bool hasVariables() const { return false; }
@@ -41,15 +41,15 @@ public:
 
   bool operator==(const Atom &rhs) const { return atom == rhs.atom; }
 
-  template <typename T> Atom subsVartoAtom(const T &x, const char *y) const {
+  template <typename T> Atom subsVartoAtom(const T &, const char *) const {
     return *this;
   }
 
-  template <typename T> Atom subsVartoVar(const T &x, const T &y) const {
+  template <typename T> Atom subsVartoVar(const T &, const T &) const {
     assert(false);
   }
 
-  template <typename T> bool hasVariable(const T &_) const { return false; }
+  template <typename T> bool hasVariable(const T &) const { return false; }
 
   Atom substituteProp(const Atom &x, const char *y) const {
     if (x.toString() == this->atom) {
@@ -1386,7 +1386,6 @@ private:
                                    [&](const Formula &x) {
                                      return (x == *Arena[index].formula());
                                    });
-      // facts.erase(facts.cend() - 1);
       if (it != facts.cend())
         facts.erase(it);
 
