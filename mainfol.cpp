@@ -22,7 +22,7 @@ int main()
   // The solver
   Solver s{{&fpp1, &fpp11, &fpp2}, &KB, {}};
   std::cout << s.toString() << "\n";
-  if (s.check())
+  if (s.forward_inference())
     std::cout << s.toString() << "\n";
   return 0;
 }

@@ -723,7 +723,7 @@ public:
          std::vector<std::pair<uint64_t, uint64_t>> &&precedence)
       : ruletbl(tbl), facts(std::move(facts)),
         precedence(std::move(precedence)) {}
-  bool check() {
+  bool forward_inference() {
     bool ret = true;
     // Run the algorithm here
     // 1. Push the facts into the processing queue
@@ -981,7 +981,7 @@ public:
   }
   ~Solver() {}
 
-  std::vector<std::vector<Formula>> backward_chain(const Formula &goal) {
+  std::vector<std::vector<Formula>> backward_inference(const Formula &goal) {
     // First make the node for the goal
     Arena.push_back(Node{{}, &goal, false});
     DD(std::cout << "------Nodes in arena before processing: \n";
