@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -1007,10 +1008,11 @@ public:
   }
 
   // Check if the given theorem is in facts of the solver or not.
-  template <typename Func> bool check_facts(const Formula &f, Func func) {
-    auto it =
-        std::find_if(facts.begin(), facts.end(),
-                     [&f, &func](const Formula *x) { return func(f, *x); });
+  template <typename Func> bool check_facts(const Formula &f, Func &&func) {
+    auto it = std::find_if(facts.begin(), facts.end(),
+                           [&f, ff = std::move(func)](const Formula *x) {
+                             return ff(f, *x);
+                           });
     return it != facts.end();
   }
 
@@ -1025,7 +1027,7 @@ public:
       for (const auto &v : ret) {
         // Each one of these vectors are OR paths that can prove the
         // goal.
-	bool rr = false;
+        bool rr = false;
         for (const Formula &x : v) {
           if (x.getFact()) {
             // Is this a not? Then it should *not* be in the facts of
