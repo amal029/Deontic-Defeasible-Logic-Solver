@@ -49,7 +49,7 @@ int main() {
   Solver s{{&f1, &f2}, &rules, {{6, 1}}};
   std::cout << s.toString() << "\n";
   // Now we can check if the rules are satisfied
-  if (s.forward_inference())
+  if (s.check())
     // Get the model after checking
     std::cout << s.toString() << "\n";
   // Try to copy a formula

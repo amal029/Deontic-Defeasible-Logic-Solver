@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <iostream>
 #include <numeric>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -493,8 +495,12 @@ public:
         formula);
   }
 
+  void setFact(bool val) { isFact = val; }
+  bool getFact() const { return isFact; }
+
 private:
   std::variant<Atom, PNot, OBL, DNot, Predicate> formula;
+  bool isFact = false;
 };
 
 // The Formula hash
@@ -696,6 +702,9 @@ public:
     return toret;
   }
 
+  void setFact() { isFact = true; }
+  bool getFact() const { return isFact; }
+
   ~Node() {
     if (tofree) {
       delete f;
@@ -707,6 +716,7 @@ private:
   const Formula *f;
   bool tonot = false;
   bool tofree = false;
+  bool isFact = false;
 };
 
 class Solver {
@@ -990,18 +1000,52 @@ public:
        << "----------------\n";)
 
     // Now just get the set of facts needed to prove the final goal.
-    std::vector<std::vector<Formula>> facts;
-    get_facts(facts);
+    std::vector<std::vector<Formula>> theorems;
+    get_facts(theorems);
     // Return the formula
-    return facts;
+    return theorems;
   }
 
-  // Walk the AND-OR tree
-  void walk_and_or_tree(int index = 0) {
-    std::cout << Arena[index].toString() << "\n";
-    for (size_t index : Arena[index].Edges()) {
-      walk_and_or_tree(index);
+  // Check if the given theorem is in facts of the solver or not.
+  template <typename Func> bool check_facts(const Formula &f, Func func) {
+    auto it =
+        std::find_if(facts.begin(), facts.end(),
+                     [&f, &func](const Formula *x) { return func(f, *x); });
+    return it != facts.end();
+  }
+
+  // This is the main checker
+  bool check(const std::optional<Formula> goal = {}) {
+    bool toret = false;
+    if (!goal.has_value()) {
+      toret = forward_inference();
+    } else {
+      // This is backward inference
+      std::vector<std::vector<Formula>> ret = backward_inference(*goal);
+      for (const auto &v : ret) {
+        // Each one of these vectors are OR paths that can prove the
+        // goal.
+        toret = true;
+        for (const Formula &x : v) {
+          if (x.getFact()) {
+            // Is this a not?
+            if (x.isNot()) {
+              // Then it should *not* be in the facts of the solver.
+              toret &= check_facts(x, [](const Formula &x, const Formula &y) {
+                return !(x == y);
+              });
+            } else {
+              // It should be in the facts of the solver.
+              toret &= check_facts(
+                  x, [](const Formula &x, const Formula &y) { return x == y; });
+            }
+          }
+        }
+        if (toret)
+          break;
+      }
     }
+    return toret;
   }
 
 private:
@@ -1245,6 +1289,7 @@ private:
     if (rules.empty()) {
       DD(std::cout << "Done processing node: " << Arena[node_index].toString()
                    << "\n";)
+      Arena[node_index].setFact();
       goto END;
     }
 
@@ -1349,8 +1394,12 @@ private:
                   std::vector<std::vector<Formula>> &ffacts) {
 
     // This guy makes a copy of the formula to be sent back.
-    if ((index != 0) && (!(Arena[index].toNot())))
-      facts.push_back(Formula{*(Arena[index].formula())});
+    if ((index != 0) && (!(Arena[index].toNot()))) {
+      Formula temp{*(Arena[index].formula())};
+      // Setting up if this is a fact.
+      temp.setFact(Arena[index].getFact());
+      facts.push_back(std::move(temp));
+    }
 
     DD(std::cout << "Facts: ["; for (const auto &x : facts) {
       std::cout << x.toString() << " ";
