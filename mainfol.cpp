@@ -21,12 +21,14 @@ int main() {
   // The solver
   Solver s{{&fpp1, &fpp11, &fpp2}, &KB, {}};
   std::cout << s.toString() << "\n";
+
   // Performing backward inference with a given goal.
   if (s.check(Predicate{"p3", {C, D, E}}))
     std::cout << s.toString() << "\n";
-  
+
   // Performing forward inference without a given goal.
   if (s.check())
     std::cout << s.toString() << "\n";
+
   return 0;
 }
