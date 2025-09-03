@@ -1025,24 +1025,26 @@ public:
       for (const auto &v : ret) {
         // Each one of these vectors are OR paths that can prove the
         // goal.
-        toret = true;
+	bool rr = false;
         for (const Formula &x : v) {
           if (x.getFact()) {
-            // Is this a not?
-            if (x.isNot()) {
-              // Then it should *not* be in the facts of the solver.
-              toret &= check_facts(x, [](const Formula &x, const Formula &y) {
-                return !(x == y);
-              });
-            } else {
-              // It should be in the facts of the solver.
-              toret &= check_facts(
-                  x, [](const Formula &x, const Formula &y) { return x == y; });
-            }
+            // Is this a not? Then it should *not* be in the facts of
+            // the solver.
+            rr =
+                x.isNot()
+                    ? check_facts(x, [](const Formula &x,
+                                        const Formula &y) { return !(x == y); })
+                    : check_facts(x, [](const Formula &x, const Formula &y) {
+                        return x == y;
+                      });
+            if (!rr)
+              break;
           }
         }
-        if (toret)
+        if (rr) {
+          toret = rr;
           break;
+        }
       }
     }
     return toret;
